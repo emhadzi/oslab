@@ -109,12 +109,12 @@ int main(int argvc, char** argv){
 			}
 			else{
 				int res;
-				read(pipefd[i][0], &res, sizeof(int)); 
+				read(pipefd[i][0], &res, sizeof(int));
+				close(pipefd[i][0]); 
 				tot += res;
 				printf("Worker %d successfully accounted\n", i+1);
 			}
 		}
-		close(fdr);
 
 		if(!ok) printf("Cannot provide final result because some worker failed\n");
 		else printf("Final result: %d\n", tot);
