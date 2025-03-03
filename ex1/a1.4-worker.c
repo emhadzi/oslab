@@ -12,9 +12,21 @@
 #define BUFF_SIZE 4096
 #define READ_DELAY 10
 
+int pfd, workerId;
+int cur, cnt;
+
+void write_to_pipe(int lastProc, int count){ //lastProc: last processed byte (from start of file)
+	char msg[12];
+	int write_sz = snprintf(msg, sizeof(msg), "%d%d%d", workerId, lastProc, count);
+	//write(pfd, msg, sizeof(msg));
+	//TODO: Erase later
+	printf("Successfully wrote: %d, %d, %d\n", workerId, lastProc, count);
+}
+
 void handle_log(int sig){
 	printf("Singal received\n");
-	exit(0);
+	write_to_pipe(cur-1, cnt);
+	printf("Worker (%d) report sent\n", workerId);
 }
 
 int main(int argc, char **argv){
@@ -23,9 +35,10 @@ int main(int argc, char **argv){
 		return -1; 
 	}
 
+	pfd = atoi(argv[6]), workerId = atoi(argv[1]);
 	int fd = open(argv[2], O_RDONLY);
 	if(fd < 0){
-		printf("Worker %s: Error opening file to read\n", argv[1]);
+		printf("Worker %d: Error opening file to read\n", workerId);
 		return -1;
 	}
 
@@ -36,25 +49,32 @@ int main(int argc, char **argv){
 
 	sigaction(SIGINT, &slog, NULL);
 
-	int cnt = 0;
 	int startPos = atoi(argv[3]), endPos = startPos + atoi(argv[4]) - 1;
+	cur = startPos, cnt = 0;
 	lseek(fd, startPos, SEEK_SET);
 	char buff[BUFF_SIZE];
 
+	//For signal blocking to work:
+	sigset_t mask, oldmask;
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+
 	//Dispatcher should allways provide workers with chunks that are alligned with BUFF_SIZE
-	for(int i = startPos; i < endPos; i += BUFF_SIZE){
-		read(fd, buff, BUFF_SIZE);
+	while(cur < endPos){
+		read(fd, buff, BUFF_SIZE); //TODO: look at what happens if SIGINT is received while reading
 		sleep(READ_DELAY);
 		int batch = 0;
 		for(int j = 0; j < BUFF_SIZE; j++)
 			batch += buff[j] == argv[5][0];
-		cnt += batch;	
+		sigprocmask(SIG_BLOCK, &mask, &oldmask); //blocking
+		cnt += batch;
+		cur += BUFF_SIZE;	
+		sigprocmask(SIG_SETMASK, &oldmask, NULL);
 	} 
 	close(fd);
 	
-	printf("Worker (%s): Found %d occurances\n", argv[1], cnt);
-	int pfd = atoi(argv[6]);
-	write(pfd, &cnt, sizeof(int));
+	printf("Worker (%d) finished: Found %d occurances\n", workerId, cnt);
+	write_to_pipe(endPos, cnt);
 	close(pfd);
 
 	return 0;
