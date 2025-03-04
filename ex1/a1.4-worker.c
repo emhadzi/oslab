@@ -44,9 +44,8 @@ int main(int argc, char **argv){
 	struct sigaction slog;
 	slog.sa_handler = handle_log;
 	sigemptyset(&slog.sa_mask);
-	slog.sa_flags = SA_SIGINFO;
 
-	sigaction(SIGINT, &slog, NULL);
+	sigaction(SIGUSR1, &slog, NULL);
 
 	int startPos = atoi(argv[3]), endPos = startPos + atoi(argv[4]) - 1;
 	cur = startPos, cnt = 0;
@@ -54,14 +53,14 @@ int main(int argc, char **argv){
 	char buff[BUFF_SIZE];
 
 	//For signal blocking to work:
-	sigset_t mask, oldmask;
-	sigemptyset(&mask);
-	sigaddset(&mask, SIGINT);
-
+	sigset_t block, unblock;
+	sigemptyset(&block), sigemptyset(&unblock);
+	sigaddset(&block, SIGINT), sigaddset(&block, SIGUSR1);
+	sigaddset(&unblock, SIGUSR1);
 	//Dispatcher should allways provide workers with chunks that are alligned with BUFF_SIZE
 	//Final chunk might not be full
 	while(cur < endPos){
-		sigprocmask(SIG_BLOCK, &mask, &oldmask); //blocking
+		sigprocmask(SIG_BLOCK, &block, NULL); //blocking
 		int readSz = read(fd, buff, BUFF_SIZE); //TODO: look at what happens if SIGINT is received while reading
 		sleep(READ_DELAY);
 		int batch = 0;
@@ -69,7 +68,7 @@ int main(int argc, char **argv){
 			batch += buff[j] == argv[5][0];
 		cnt += batch;
 		cur += readSz;	
-		sigprocmask(SIG_SETMASK, &oldmask, NULL);
+		sigprocmask(SIG_UNBLOCK, &unblock, NULL);
 	} 
 	close(fd);
 	

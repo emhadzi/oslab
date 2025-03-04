@@ -1,5 +1,12 @@
+//TODO; small bug partioning last worker
+//TODO: organise worker info better with a dedicated struct and free memory
+//TODO: bulletproof signal handling (mashing Ctrl+c) (looks good)
+
+#include <signal.h>
 #include <unistd.h>
+#include <errno.h>
 #include <stdio.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -15,7 +22,7 @@ int (*pipefd)[2];
 void getReport(){
 	//send signal to each worker
 	for(int i = 0; i < workers; i++)
-		kill(pid[i], SIGINT);
+		kill(pid[i], SIGUSR1);
 	//receive results
 	for(int i = 0; i < workers; i++){
 		int ans[2];
@@ -67,7 +74,7 @@ int main(int argc, char** argv){
 	printf("Target file size: %d\n", sz);
 	close(fdr);	
 
-	workers = (argv[3] == NULL ? 2 : atoi(argv[4]));	
+	workers = (argv[3] == NULL ? 2 : atoi(argv[3]));	
 	int workerChunkCount = chunks / workers + (chunks % workers > 0 ? 1 : 0);
 	int workerByteCount = workerChunkCount * CHUNK_SIZE;
  	printf("Assigning up to %d bytes to each worker\n", workerByteCount);
@@ -77,7 +84,7 @@ int main(int argc, char** argv){
 	workerCnt = malloc(workers * sizeof(int));	
 	workerStart = malloc(workers * sizeof(int));
 	workerLoad = malloc(workers * sizeof(int));
-	pipefd = malloc(sizeof(int[workers][2]));
+	pipefd = malloc(workers * sizeof(int[2]));
 
 	for(int i = 0; i < workers; i++){	
 		workerStart[i] = i * workerByteCount; 
@@ -131,20 +138,18 @@ int main(int argc, char** argv){
 		struct sigaction slog;
 		slog.sa_handler = handle_log;
 		sigemptyset(&slog.sa_mask);
-		slog.sa_flags = SA_SIGINFO;
-
 		sigaction(SIGINT, &slog, NULL);
 
 		//wait for all children to finish and report result
 		//if one child fails remember it, after all finish, report it
 		for(int i = 0; i < workers; i++){		
-			int wstatus;
-			pid_t done = waitpid(pid[i], &wstatus, 0);
-			
-			if(wstatus != 0){
-				printf("Worker %d failed\n", i+1);
-				return -1;
-			}
+			int wstatus, done;
+			do{	
+				errno = 0;
+				done = waitpid(pid[i], &wstatus, 0);
+			}while(errno == EINTR && done == -1);
+			if(done == -1)
+				printf("Worker (%d): Failed\n", i+1);
 		}
 		getReport();
 		printReport();
