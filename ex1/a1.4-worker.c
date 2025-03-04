@@ -10,23 +10,22 @@
 #include <stdlib.h>
 #include <signal.h>
 #define BUFF_SIZE 4096
-#define READ_DELAY 10
+#define READ_DELAY 1
 
 int pfd, workerId;
 int cur, cnt;
 
 void write_to_pipe(int lastProc, int count){ //lastProc: last processed byte (from start of file)
-	char msg[12];
-	int write_sz = snprintf(msg, sizeof(msg), "%d%d%d", workerId, lastProc, count);
-	//write(pfd, msg, sizeof(msg));
-	//TODO: Erase later
-	printf("Successfully wrote: %d, %d, %d\n", workerId, lastProc, count);
+	int msg[2];
+	msg[0] = lastProc, msg[1] = count;
+	write(pfd, msg, sizeof(msg));
+	//printf("Successfully wrote: %d, %d, %d\n", workerId, lastProc, count);
 }
 
 void handle_log(int sig){
-	printf("Singal received\n");
+	printf("Worker (%d): Singal received\n", workerId);
 	write_to_pipe(cur-1, cnt);
-	printf("Worker (%d) report sent\n", workerId);
+	printf("Worker (%d): Report sent\n", workerId);
 }
 
 int main(int argc, char **argv){
@@ -60,15 +59,16 @@ int main(int argc, char **argv){
 	sigaddset(&mask, SIGINT);
 
 	//Dispatcher should allways provide workers with chunks that are alligned with BUFF_SIZE
+	//Final chunk might not be full
 	while(cur < endPos){
-		read(fd, buff, BUFF_SIZE); //TODO: look at what happens if SIGINT is received while reading
+		sigprocmask(SIG_BLOCK, &mask, &oldmask); //blocking
+		int readSz = read(fd, buff, BUFF_SIZE); //TODO: look at what happens if SIGINT is received while reading
 		sleep(READ_DELAY);
 		int batch = 0;
-		for(int j = 0; j < BUFF_SIZE; j++)
+		for(int j = 0; j < readSz; j++)
 			batch += buff[j] == argv[5][0];
-		sigprocmask(SIG_BLOCK, &mask, &oldmask); //blocking
 		cnt += batch;
-		cur += BUFF_SIZE;	
+		cur += readSz;	
 		sigprocmask(SIG_SETMASK, &oldmask, NULL);
 	} 
 	close(fd);
