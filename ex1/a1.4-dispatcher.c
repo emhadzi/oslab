@@ -1,6 +1,6 @@
-//TODO; small bug partioning last worker
-//TODO: bulletproof signal handling (mashing Ctrl+c) (looks good)
-//TODO: add timeout for trying to read from worker
+//TODO; small bug partioning last worker (will change partiioning anyways)
+//TODO: bulletproof signal handling (mashing Ctrl+c)
+//TODO: handle workers that are done correctly (do not include them in upToDate etc)
 
 #include <signal.h>
 #include <unistd.h>
@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #define CHUNK_SIZE 4096
 #define min(a, b) (((a) < (b) ? (a) : (b)))
 
@@ -17,45 +18,46 @@ struct Worker{
 	int pid; 
 	int wStart, wLoad; //description of worker assignment
 	int wCur, wCnt; //worker's most recent results
+	bool isUpToDate;
 	int pipefd[2];
 };
 
-int fileSz, workerPop;
+int fileSz, workerPop, upToDate = 0;
 struct Worker *work;
 
-void getReport(){
+void requestReport(){
+	//No worker is up-to-date	
+	upToDate = 0;
+	for(int i = 0; i < workerPop; i++)
+		work[i].isUpToDate = 0;	
 	//send signal to each worker
 	for(int i = 0; i < workerPop; i++)
 		kill(work[i].pid, SIGUSR1);
-	//receive results
-	for(int i = 0; i < workerPop; i++){
-		int ans[2];
-		while(read(work[i].pipefd[0], &ans, sizeof(ans)) == 0); //keep reading until there is something there
-		work[i].wCur = ans[0] + 1; //update worker state based on ans
-		work[i].wCnt = ans[1];
-	}
 }
 
 void printReport(){
+	//Latest report complete, so reset upToDate	
+	upToDate = 0;
+	for(int i = 0; i < workerPop; i++)
+		work[i].isUpToDate = 0;	
 	//calculate individual progress
-	int totProc = 0, totLoad = 0, totFound = 0;
+	int totProc = 0, totFound = 0;
 	for(int i = 0; i < workerPop; i++){
 		int proc = work[i].wCur - work[i].wStart;
 		double per = (proc * 100.0) / work[i].wLoad;
 		double perFound = (work[i].wCnt * 100.0) / proc;
 		printf("Worker (%d): Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", i + 1, proc, work[i].wLoad, per, work[i].wCnt, perFound);
-		totProc += proc, totLoad += work[i].wLoad, totFound += work[i].wCnt;
+		totProc += proc, totFound += work[i].wCnt;
 	}
 
 	//total resutlts
-	double totPer = (totProc * 100.0) / totLoad, totPerFound = (totFound * 100.0) / totProc;
-	printf("Summary: Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", totProc, totLoad, totPer, totFound, totPerFound);
+	double totPer = (totProc * 100.0) / fileSz, totPerFound = (totFound * 100.0) / totProc;
+	printf("Summary: Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", totProc, fileSz, totPer, totFound, totPerFound);
 }
 
 void handle_log(int sig){
 	printf("Singal received\n");
-	getReport();
-	printReport();
+	requestReport();
 }
 
 //argv[1] : fin.txt
@@ -143,19 +145,25 @@ int main(int argc, char** argv){
 		sigemptyset(&slog.sa_mask);
 		sigaction(SIGINT, &slog, NULL);
 
-		//wait for all children to finish and report result
-		//if one child fails remember it, after all finish, report it
-		for(int i = 0; i < workerPop; i++){		
-			int wstatus, done;
-			do{	
-				errno = 0;
-				done = waitpid(work[i].pid, &wstatus, 0);
-			}while(errno == EINTR && done == -1);
-			if(done == -1)
-				printf("Worker (%d): Failed\n", i+1);
+		int done = 0;
+		while(done != workerPop){
+			//look at each worker's pipe
+			for(int i = 0; i < workerPop; i++){
+				int ans[2];
+				if(read(work[i].pipefd[0], &ans, sizeof(ans)) > 0){
+					work[i].wCur = ans[0] + 1;
+					work[i].wCnt = ans[1];
+					
+					upToDate += !work[i].isUpToDate;
+					work[i].isUpToDate = 1;
+					if(upToDate == workerPop)
+						printReport();
+					
+					done += work[i].wCur == work[i].wStart + work[i].wLoad - 1;
+				}
+			}			
 		}
-		getReport();
-		printReport();
+
 		free(work);
 		return 0;
 	}
