@@ -1,6 +1,5 @@
 //TODO; small bug partioning last worker (will change partiioning anyways)
 //TODO: bulletproof signal handling (mashing Ctrl+c)
-//TODO: handle workers that are done correctly (do not include them in upToDate etc)
 
 #include <signal.h>
 #include <unistd.h>
@@ -22,24 +21,26 @@ struct Worker{
 	int pipefd[2];
 };
 
-int fileSz, workerPop, upToDate = 0;
+int fileSz, workerPop, upToDate = 0, done = 0;
 struct Worker *work;
 
+void resetUpToDate(){	
+	//Only workers that are done are up-to-date	
+	upToDate = done;
+	for(int i = 0; i < workerPop; i++)
+		work[i].isUpToDate = work[i].wCur == work[i].wStart + work[i].wLoad;
+}
+
 void requestReport(){
-	//No worker is up-to-date	
-	upToDate = 0;
+	resetUpToDate();
+	//send signal to each worker that is not done
 	for(int i = 0; i < workerPop; i++)
-		work[i].isUpToDate = 0;	
-	//send signal to each worker
-	for(int i = 0; i < workerPop; i++)
-		kill(work[i].pid, SIGUSR1);
+		if(work[i].wCur < work[i].wStart + work[i].wLoad)
+			kill(work[i].pid, SIGUSR1);
 }
 
 void printReport(){
-	//Latest report complete, so reset upToDate	
-	upToDate = 0;
-	for(int i = 0; i < workerPop; i++)
-		work[i].isUpToDate = 0;	
+	resetUpToDate();
 	//calculate individual progress
 	int totProc = 0, totFound = 0;
 	for(int i = 0; i < workerPop; i++){
@@ -57,6 +58,7 @@ void printReport(){
 
 void handle_log(int sig){
 	printf("Singal received\n");
+	printf("Done: %d\n", done);
 	requestReport();
 }
 
@@ -145,10 +147,13 @@ int main(int argc, char** argv){
 		sigemptyset(&slog.sa_mask);
 		sigaction(SIGINT, &slog, NULL);
 
-		int done = 0;
 		while(done != workerPop){
 			//look at each worker's pipe
 			for(int i = 0; i < workerPop; i++){
+				//ignore done workers
+				if(work[i].wCur == work[i].wStart + work[i].wLoad)
+					continue;
+
 				int ans[2];
 				if(read(work[i].pipefd[0], &ans, sizeof(ans)) > 0){
 					work[i].wCur = ans[0] + 1;
@@ -156,13 +161,19 @@ int main(int argc, char** argv){
 					
 					upToDate += !work[i].isUpToDate;
 					work[i].isUpToDate = 1;
+					
+					if(work[i].wCur == work[i].wStart + work[i].wLoad){
+						done++;
+						//TODO: assign new job to worker that is done 
+					}
+	
 					if(upToDate == workerPop)
 						printReport();
-					
-					done += work[i].wCur == work[i].wStart + work[i].wLoad - 1;
 				}
 			}			
 		}
+
+		printf("DONE\n");
 
 		free(work);
 		return 0;
