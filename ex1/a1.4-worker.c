@@ -1,8 +1,5 @@
 //Worker receives as arguments : (1) his index, (2) input file name (to count from), (3) position (int bytes) to start reading
-//(4) number of bytes to read, (5) character to count, (6) file descriptor to write-only pipe (write result for each chunk)
-//TODO: look at dup2(fd, ...) to avoid passing file descriptors as arguments to workers
-
-//Logging (chunks processed, count so far) will be sent through (SIGUSR1, SIGUSR2)
+//(4) number of bytes to read, (5) character to count 
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -12,13 +9,12 @@
 #define BUFF_SIZE 4096
 #define READ_DELAY 1
 
-int pfd, workerId;
-int cur, cnt;
+int workerId, cur, cnt;
 
 void write_to_pipe(int lastProc, int count){ //lastProc: last processed byte (from start of file)
 	int msg[2];
 	msg[0] = lastProc, msg[1] = count;
-	write(pfd, msg, sizeof(msg));
+	write(STDOUT_FILENO, msg, sizeof(msg));
 	//printf("Successfully wrote: %d, %d, %d\n", workerId, lastProc, count);
 }
 
@@ -29,12 +25,12 @@ void handle_log(int sig){
 }
 
 int main(int argc, char **argv){
-	if(argc < 7){
+	if(argc < 6){
 		printf("Invalid arguments\n");
 		return -1; 
 	}
 
-	pfd = atoi(argv[6]), workerId = atoi(argv[1]);
+	workerId = atoi(argv[1]);
 	int fd = open(argv[2], O_RDONLY);
 	if(fd < 0){
 		printf("Worker %d: Error opening file to read\n", workerId);
@@ -61,7 +57,7 @@ int main(int argc, char **argv){
 	//Final chunk might not be full
 	while(cur < endPos){
 		sigprocmask(SIG_BLOCK, &block, NULL); //blocking
-		int readSz = read(fd, buff, BUFF_SIZE); //TODO: look at what happens if SIGINT is received while reading
+		int readSz = read(fd, buff, BUFF_SIZE); 
 		sleep(READ_DELAY);
 		int batch = 0;
 		for(int j = 0; j < readSz; j++)
@@ -74,7 +70,6 @@ int main(int argc, char **argv){
 	
 	printf("Worker (%d) finished: Found %d occurances\n", workerId, cnt);
 	write_to_pipe(endPos, cnt);
-	close(pfd);
 
 	return 0;
 }

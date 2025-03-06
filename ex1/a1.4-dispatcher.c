@@ -90,6 +90,8 @@ int main(int argc, char** argv){
 
 	work = malloc(workerPop * sizeof(struct Worker));	
 
+	//TODO: change strategy
+
 	for(int i = 0; i < workerPop; i++){	
 		work[i].wStart = i * workerByteCount; 
 		work[i].wLoad = min(workerByteCount, fileSz - work[i].wStart);
@@ -123,16 +125,18 @@ int main(int argc, char** argv){
 		printf("Worker %d: Starting\n", ind + 1);
 		//close ununsed (by child) reading end of pipe
 		close(work[ind].pipefd[0]);	
-		//TODO: LOOK INTO DUP2
-		char indStr[12], startStr[12], sizeStr[12], pipeStr[12];
+		
+		char indStr[12], startStr[12], sizeStr[12];
 		sprintf(indStr, "%d", ind + 1);
 		sprintf(startStr, "%d", work[ind].wStart);
 		sprintf(sizeStr, "%d", work[ind].wLoad);
-		sprintf(pipeStr, "%d", work[ind].pipefd[1]);
+		//replace stdout with pipe write end
+		dup2(work[ind].pipefd[1], STDOUT_FILENO);
+		close(work[ind].pipefd[1]);		
 
 		free(work);
 
-		char* args[] = {"a1.4-worker", indStr, argv[1], startStr, sizeStr, argv[2], pipeStr, NULL};	
+		char* args[] = {"a1.4-worker", indStr, argv[1], startStr, sizeStr, argv[2], NULL};	
 		if(execv("./a1.4-worker", args) == -1){
 			printf("Error loading exec\n");
 			return -1; 
