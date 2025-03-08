@@ -9,6 +9,7 @@
 #define BUFF_SIZE 4096
 #define READ_DELAY 1
 
+int startPos, endPos;
 int workerId, cur, cnt;
 
 void write_to_pipe(int lastProc, int count){ //lastProc: last processed byte (from start of file)
@@ -43,7 +44,7 @@ int main(int argc, char **argv){
 
 	sigaction(SIGUSR1, &slog, NULL);
 
-	int startPos = atoi(argv[3]), endPos = startPos + atoi(argv[4]) - 1;
+	startPos = atoi(argv[3]), endPos = startPos + atoi(argv[4]) - 1;
 	cur = startPos, cnt = 0;
 	lseek(fd, startPos, SEEK_SET);
 	char buff[BUFF_SIZE];
