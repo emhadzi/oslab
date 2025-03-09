@@ -1,6 +1,4 @@
-//TODO; small bug partioning last worker (will change partiioning anyways)
 //TODO: bulletproof signal handling (mashing Ctrl+c)
-//TODO: change job assignment algorithm to "tread"
 //TODO: have "smooth" finish (no children crashing)
 //TODO: fix bug: unexpected crashes with >= 10 workers when logging second time
 
@@ -14,7 +12,9 @@
 #include <stdbool.h>
 #define CHUNK_SIZE 4096
 #define WINDOW_RAT 0.20
+#define MIN_WORKER_CHUNKS 5
 #define min(a, b) (((a) < (b) ? (a) : (b)))
+#define max(a, b) (((a) < (b) ? (b) : (a)))
 
 struct Worker{
 	int pid; 
@@ -37,15 +37,18 @@ struct Worker *work;
 //Creates new process and returns pid of child to parent 
 int createWorker(int ind){
 	//TODO: Look for gaps because of failures
+	if(front == fileSz)
+		return -1;
 	work[ind].wStart = work[ind].wCur = front;
-	work[ind].wLoad = normalWLoad;
+	work[ind].wLoad = min(normalWLoad, fileSz - front);
 	work[ind].wCnt = 0;
 	if(work[ind].isUpToDate){	
 		upToDate--;
 		work[ind].isUpToDate = 0;	
 	}
-	front += normalWLoad;
+	front += work[ind].wLoad;
 	pipe(work[ind].pipefd);
+	fcntl(work[ind].pipefd[0], F_SETFL, O_NONBLOCK);		
 	
 	int p = fork();
 	//Parent process gets back pid of child process
@@ -74,6 +77,7 @@ int createWorker(int ind){
 
 void resetUpToDate(){	
 	//Only workers that are done are up-to-date	
+A
 	upToDate = 0;
 	for(int i = 0; i < workerPop; i++)
 		work[i].isUpToDate = 0;
@@ -84,7 +88,7 @@ void requestReport(){
 	expectingLog = 1;
 	//send signal to each worker that is not done
 	for(int i = 0; i < workerPop; i++)
-		if(work[i].wCur < work[i].wStart + work[i].wLoad)
+		if(work[i].pid > 0)
 			kill(work[i].pid, SIGUSR1);
 }
 
@@ -93,6 +97,8 @@ void printReport(){
 	expectingLog = 0;
 	//calculate individual progress
 	for(int i = 0; i < workerPop; i++){
+		if(work[i].pid == -1)
+			continue;
 		int wProc = work[i].wCur - work[i].wStart;
 		double per = (wProc * 100.0) / work[i].wLoad;
 		double perFound = (work[i].wCnt * 100.0) / wProc;
@@ -138,7 +144,7 @@ int main(int argc, char** argv){
 	//So determine an aproximate load for each worker
 	//ALTERNATIVE: DEFINE NORMALWLOAD FROM THE START 
 	int windowChunks = chunks * WINDOW_RAT;
-	normalWLoad = CHUNK_SIZE * (windowChunks / workerPop);
+	normalWLoad = CHUNK_SIZE * max((windowChunks / workerPop), MIN_WORKER_CHUNKS);
 
 	for(int ind = 0; ind < workerPop; ind++){
 		//Only for parent process 
@@ -153,11 +159,16 @@ int main(int argc, char** argv){
 	sigemptyset(&slog.sa_mask);
 	sigaction(SIGINT, &slog, NULL);
 
+	sigset_t block;
+	sigemptyset(&block);
+	sigaddset(&block, SIGINT);
+	
 	while(proc < fileSz){
+		sigprocmask(SIG_BLOCK, &block, NULL); //blocking
 		//look at each worker's pipe
 		for(int i = 0; i < workerPop; i++){
 			int ans[2];
-			if(read(work[i].pipefd[0], &ans, sizeof(ans)) > 0){
+			if(work[i].pid != -1 && read(work[i].pipefd[0], &ans, sizeof(ans)) > 0){
 				//(ans[0], ans[1]) : (position of last processed byte, targets found so far)
 				//update global stats
 				proc += ans[0] + 1 - work[i].wCur;
@@ -176,6 +187,8 @@ int main(int argc, char** argv){
 					printReport();
 			}
 		}
+		sigprocmask(SIG_UNBLOCK, &block, NULL);//unblocking
+		//Signals are handled here	
 		//TODO: HANDLE REQUESTS FROM FRONT-END			
 	}
 	printf("DONE\n");
