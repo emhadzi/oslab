@@ -11,64 +11,123 @@
 #include <fcntl.h>
 #include <stdbool.h>
 #define CHUNK_SIZE 4096
-#define WINDOW_RAT 0.20
+#define WINDOW_RAT 0.05
 #define MIN_WORKER_CHUNKS 5
 #define min(a, b) (((a) < (b) ? (a) : (b)))
 #define max(a, b) (((a) < (b) ? (b) : (a)))
 
-struct Worker{
+typedef struct Worker{
 	int pid; 
 	int wStart, wLoad; //description of worker assignment
 	int wCur, wCnt; //worker's most recent results
 	bool isUpToDate;
 	int pipefd[2];
-};
+	struct Worker *nxt, *prv; //pointer to next and previous worker in list
+} Worker;
 
-int workerPop, fileSz, normalWLoad;
-int upToDate = 0, front = 0;
-int proc = 0, occ = 0;
+typedef struct Segment{
+	int segStart, segSize;
+	struct Segment* nxt;
+} Segment;
+
+int workerCount = 0, gapCount = 0;
+int fileSz, normalWLoad;
+int front = 0, proc = 0, occ = 0;
 char *target, *fileName;
 bool expectingLog = 0;
 
-struct Worker *work;
+//WORKER = PROCESS
+Segment *gapRoot = NULL, *gapHead = NULL;
+Worker *workRoot = NULL, *workHead = NULL;
+
+void extendWorkerList(){
+	Worker *prv = workHead; 
+	if(workHead == NULL)	
+		workRoot = workHead = malloc(sizeof(Worker));
+	else{
+		workHead->nxt = malloc(sizeof(Worker));
+		workHead = workHead->nxt;
+	}
+	workHead->prv = prv;
+}
+
+void deleteWorker(Worker *cur){	
+	printf("deleting\n");
+	workerCount--;
+	if(workerCount == 0)
+		gapRoot = gapHead = NULL;
+	else if(cur == workRoot){
+		workRoot = cur->nxt;
+		workRoot->prv = NULL;
+	}
+	else if(cur == workHead){
+		workHead = workHead->prv;
+		workHead->nxt = NULL;
+	}
+	else{
+		Worker *l = cur->prv, *r = cur->nxt;
+		l->nxt = r;
+		r->prv = l;
+	}
+	free(cur);
+	printf("delete OK\n");
+}
+
+void popGapList(){
+	Segment *nxt = gapRoot->nxt;
+	free(gapRoot);
+	gapRoot = nxt;
+	if(gapRoot == NULL)
+		gapHead = NULL;
+}
 
 //Finds correct position and load of "ind" worker
 //Sets up its pipe
 //Creates new process and returns pid of child to parent 
-int createWorker(int ind){
-	//TODO: Look for gaps because of failures
-	if(front == fileSz)
-		return -1;
-	work[ind].wStart = work[ind].wCur = front;
-	work[ind].wLoad = min(normalWLoad, fileSz - front);
-	work[ind].wCnt = 0;
-	if(work[ind].isUpToDate){	
-		upToDate--;
-		work[ind].isUpToDate = 0;	
+bool createWorker(){
+	//no job to assign
+	if(gapRoot == NULL && front == fileSz)
+		return 0;
+
+	workerCount++;
+	extendWorkerList();
+
+	if(gapRoot == NULL){
+		workHead->wStart = workHead->wCur = front;
+		workHead->wLoad = min(normalWLoad, fileSz - front);
+		front += workHead->wLoad;
 	}
-	front += work[ind].wLoad;
-	pipe(work[ind].pipefd);
-	fcntl(work[ind].pipefd[0], F_SETFL, O_NONBLOCK);		
+	else{
+		workHead->wStart = workHead->wCur = gapRoot->segStart;
+		workHead->wLoad = gapRoot->segSize;
+		popGapList();
+	}
+	workHead->wCnt = workHead->isUpToDate = 0;	
+	pipe(workHead->pipefd);
+	fcntl(workHead->pipefd[0], F_SETFL, O_NONBLOCK);		
 	
 	int p = fork();
 	//Parent process gets back pid of child process
-	if(p > 0)
-		return p;
+	if(p > 0){
+		workHead->pid = p;
+		return 1;
+	}
 
 	//Load child process executable	
-	printf("Worker %d: Starting\n", ind + 1);
+	printf("Worker %d: Starting\n", getpid());
 	//close ununsed (by child) reading end of pipe
-	close(work[ind].pipefd[0]);	
+	close(workHead->pipefd[0]);	
 	
 	char indStr[12], startStr[12], sizeStr[12];
-	sprintf(indStr, "%d", ind + 1);
-	sprintf(startStr, "%d", work[ind].wStart);
-	sprintf(sizeStr, "%d", work[ind].wLoad);
+	sprintf(indStr, "%d", getpid());
+	sprintf(startStr, "%d", workHead->wStart);
+	sprintf(sizeStr, "%d", workHead->wLoad);
 	//replace stdout with pipe write end
-	dup2(work[ind].pipefd[1], STDOUT_FILENO);
-	close(work[ind].pipefd[1]);			
+	dup2(workHead->pipefd[1], STDOUT_FILENO);
+	close(workHead->pipefd[0]);			
+	close(workHead->pipefd[1]);
 	
-	char* args[] = {"a1.4-worker", indStr, fileName, startStr, sizeStr, target, NULL};	
+	char *args[] = {"a1.4-worker", indStr, fileName, startStr, sizeStr, target, NULL};	
 	if(execv("./a1.4-worker", args) == -1){
 		printf("Error loading exec\n");
 		return -1; 
@@ -76,33 +135,26 @@ int createWorker(int ind){
 }
 
 void resetUpToDate(){	
-	//Only workers that are done are up-to-date	
-A
-	upToDate = 0;
-	for(int i = 0; i < workerPop; i++)
-		work[i].isUpToDate = 0;
+	for(Worker *cur = workRoot; cur != NULL; cur = cur->nxt)	
+		cur->isUpToDate = 0;
 }
 
 void requestReport(){
 	resetUpToDate();
 	expectingLog = 1;
-	//send signal to each worker that is not done
-	for(int i = 0; i < workerPop; i++)
-		if(work[i].pid > 0)
-			kill(work[i].pid, SIGUSR1);
+	for(Worker *cur = workRoot; cur != NULL; cur = cur->nxt)	
+		kill(cur->pid, SIGUSR1);
 }
 
 void printReport(){
 	resetUpToDate();
 	expectingLog = 0;
 	//calculate individual progress
-	for(int i = 0; i < workerPop; i++){
-		if(work[i].pid == -1)
-			continue;
-		int wProc = work[i].wCur - work[i].wStart;
-		double per = (wProc * 100.0) / work[i].wLoad;
-		double perFound = (work[i].wCnt * 100.0) / wProc;
-		printf("Worker (%d): Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", i + 1, wProc, work[i].wLoad, per, work[i].wCnt, perFound);
+	for(Worker *cur = workRoot; cur != NULL; cur = cur->nxt){
+		int wProc = cur->wCur - cur->wStart;
+		double per = (wProc * 100.0) / cur->wLoad;
+		double perFound = (cur->wCnt * 100.0) / wProc;
+		printf("Worker (%d): Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", cur->pid, wProc, cur->wLoad, per, cur->wCnt, perFound);
 	}
 
 	//total resutlts
@@ -111,7 +163,7 @@ void printReport(){
 }
 
 void handle_log(int sig){
-	printf("Singal received\n");
+	printf("Requesting report\n");
 	requestReport();
 }
 
@@ -133,26 +185,21 @@ int main(int argc, char** argv){
 		return -1;
 	}	
 	fileSz = lseek(fdr, 0, SEEK_END);
-	int chunks = fileSz / CHUNK_SIZE + (fileSz % CHUNK_SIZE > 0 ? 1 : 0);
 	printf("Target file size: %d\n", fileSz);
 	close(fdr);	
 
-	workerPop = (argv[3] == NULL ? 2 : atoi(argv[3]));	
-	work = malloc(workerPop * sizeof(struct Worker));	
+	int initWorkerCount = (argv[3] == NULL ? 2 : atoi(argv[3]));	
 
 	//Out of the total chunks, first batch of workers should occupy aprox FIRST_JOB%
 	//So determine an aproximate load for each worker
-	//ALTERNATIVE: DEFINE NORMALWLOAD FROM THE START 
+	//ALTERNATIVE: DEFINE NORMALWLOAD FROM THE START 	
+	int chunks = fileSz / CHUNK_SIZE + (fileSz % CHUNK_SIZE > 0 ? 1 : 0);
 	int windowChunks = chunks * WINDOW_RAT;
-	normalWLoad = CHUNK_SIZE * max((windowChunks / workerPop), MIN_WORKER_CHUNKS);
-
-	for(int ind = 0; ind < workerPop; ind++){
-		//Only for parent process 
-		int p = createWorker(ind);
-		work[ind].pid = p;
-	}
-
-	printf("Successfully created %d workers\n", workerPop);
+	normalWLoad = CHUNK_SIZE * max((windowChunks / initWorkerCount), MIN_WORKER_CHUNKS);
+	
+	for(int ind = 0; ind < initWorkerCount; ind++)
+		createWorker(ind);
+	printf("Successfully created %d workers\n", workerCount);
 		
 	struct sigaction slog;
 	slog.sa_handler = handle_log;
@@ -166,32 +213,36 @@ int main(int argc, char** argv){
 	while(proc < fileSz){
 		sigprocmask(SIG_BLOCK, &block, NULL); //blocking
 		//look at each worker's pipe
-		for(int i = 0; i < workerPop; i++){
+		bool logAfter = expectingLog;
+		for(Worker *cur = workRoot; cur != NULL;){
+			Worker *nxt = cur->nxt; //MIN TO PEIRAKSEIS
 			int ans[2];
-			if(work[i].pid != -1 && read(work[i].pipefd[0], &ans, sizeof(ans)) > 0){
+			if(read(cur->pipefd[0], &ans, sizeof(ans)) > 0){
 				//(ans[0], ans[1]) : (position of last processed byte, targets found so far)
 				//update global stats
-				proc += ans[0] + 1 - work[i].wCur;
-				occ += ans[1] - work[i].wCnt;
-				work[i].wCur = ans[0] + 1;
-				work[i].wCnt = ans[1];
-				
-				upToDate += !work[i].isUpToDate;
-				work[i].isUpToDate = 1;
-					
-				//assign new job to worker if he's done
-				if(work[i].wCur == work[i].wStart + work[i].wLoad)
-					work[i].pid = createWorker(i); 
-	
-				if(expectingLog && upToDate == workerPop)
-					printReport();
+				proc += ans[0] + 1 - cur->wCur;
+				occ += ans[1] - cur->wCnt;
+				cur->wCur = ans[0] + 1;
+				cur->wCnt = ans[1];
+				cur->isUpToDate = 1;
+						
+				//If worker is done, delete him and create a new one
+				if(cur->wCur == cur->wStart + cur->wLoad){
+					deleteWorker(cur); //LOGO AUTOU
+					createWorker(); 
+				}
 			}
+			logAfter &= cur->isUpToDate;
+			cur = nxt;
 		}
-		sigprocmask(SIG_UNBLOCK, &block, NULL);//unblocking
+
+		if(logAfter)
+			printReport();
+
+		sigprocmask(SIG_UNBLOCK, &block, NULL); //unblocking
 		//Signals are handled here	
 		//TODO: HANDLE REQUESTS FROM FRONT-END			
 	}
 	printf("DONE\n");
-	free(work);
 	return 0; 
 }
