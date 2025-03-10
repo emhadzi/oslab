@@ -1,6 +1,5 @@
-//TODO: bulletproof signal handling (mashing Ctrl+c)
 //TODO: have "smooth" finish (no children crashing)
-//TODO: fix bug: unexpected crashes with >= 10 workers when logging second time
+//TODO: support removing children
 
 #include <signal.h>
 #include <unistd.h>
@@ -49,13 +48,13 @@ void extendWorkerList(){
 		workHead = workHead->nxt;
 	}
 	workHead->prv = prv;
+	workHead->nxt = NULL;
 }
 
 void deleteWorker(Worker *cur){	
-	printf("deleting\n");
 	workerCount--;
 	if(workerCount == 0)
-		gapRoot = gapHead = NULL;
+		workRoot = workHead = NULL;
 	else if(cur == workRoot){
 		workRoot = cur->nxt;
 		workRoot->prv = NULL;
@@ -69,8 +68,8 @@ void deleteWorker(Worker *cur){
 		l->nxt = r;
 		r->prv = l;
 	}
+	close(cur->pipefd[0]);
 	free(cur);
-	printf("delete OK\n");
 }
 
 void popGapList(){
@@ -91,7 +90,6 @@ bool createWorker(){
 
 	workerCount++;
 	extendWorkerList();
-
 	if(gapRoot == NULL){
 		workHead->wStart = workHead->wCur = front;
 		workHead->wLoad = min(normalWLoad, fileSz - front);
@@ -108,15 +106,18 @@ bool createWorker(){
 	
 	int p = fork();
 	//Parent process gets back pid of child process
+	if(p < 0){
+		printf("ERORORRO\n");
+		return 0;
+	}
 	if(p > 0){
+		close(workHead->pipefd[1]);
 		workHead->pid = p;
 		return 1;
 	}
 
 	//Load child process executable	
 	printf("Worker %d: Starting\n", getpid());
-	//close ununsed (by child) reading end of pipe
-	close(workHead->pipefd[0]);	
 	
 	char indStr[12], startStr[12], sizeStr[12];
 	sprintf(indStr, "%d", getpid());
@@ -213,7 +214,7 @@ int main(int argc, char** argv){
 	while(proc < fileSz){
 		sigprocmask(SIG_BLOCK, &block, NULL); //blocking
 		//look at each worker's pipe
-		bool logAfter = expectingLog;
+		int i = 0;
 		for(Worker *cur = workRoot; cur != NULL;){
 			Worker *nxt = cur->nxt; //MIN TO PEIRAKSEIS
 			int ans[2];
@@ -228,13 +229,18 @@ int main(int argc, char** argv){
 						
 				//If worker is done, delete him and create a new one
 				if(cur->wCur == cur->wStart + cur->wLoad){
-					deleteWorker(cur); //LOGO AUTOU
+					deleteWorker(cur);
 					createWorker(); 
+					if(nxt == NULL)
+						nxt = workHead;
 				}
 			}
-			logAfter &= cur->isUpToDate;
 			cur = nxt;
 		}
+		
+		bool logAfter = expectingLog;
+		for(Worker *cur = workRoot; cur != NULL; cur = cur->nxt)
+			logAfter &= cur->isUpToDate;
 
 		if(logAfter)
 			printReport();
