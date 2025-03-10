@@ -3,7 +3,7 @@
 
 int main(){
 	FILE *fpw = fopen("fin.txt", "w+");
-	for(int i = 0; i < SZ/5; i++)	
-    	fprintf(fpw, "abcde");
+	for(int i = 0; i < SZ/6; i++)	
+    	fprintf(fpw, "abcdef");
     fclose(fpw);
 }

@@ -20,21 +20,21 @@ void write_to_pipe(int lastProc, int count){ //lastProc: last processed byte (fr
 }
 
 void handle_log(int sig){
-	printf("Worker (%d): Singal received\n", workerId);
+	//printf("Worker (%d): Singal received\n", workerId);
 	write_to_pipe(cur-1, cnt);
-	printf("Worker (%d): Report sent\n", workerId);
+	//printf("Worker (%d): Report sent\n", workerId);
 }
 
 int main(int argc, char **argv){
 	if(argc < 6){
-		printf("Invalid arguments\n");
+		//printf("Invalid arguments\n");
 		return -1; 
 	}
 
 	workerId = atoi(argv[1]);
 	int fd = open(argv[2], O_RDONLY);
 	if(fd < 0){
-		printf("Worker %d: Error opening file to read\n", workerId);
+		//printf("Worker %d: Error opening file to read\n", workerId);
 		return -1;
 	}
 
@@ -69,7 +69,7 @@ int main(int argc, char **argv){
 	} 
 	close(fd);
 	
-	printf("Worker (%d) finished: Found %d occurances\n", workerId, cnt);
+	//printf("Worker (%d) finished: Found %d occurances\n", workerId, cnt);
 	write_to_pipe(endPos, cnt);
 
 	return 0;

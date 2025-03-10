@@ -16,7 +16,7 @@
 #define max(a, b) (((a) < (b) ? (b) : (a)))
 
 typedef struct Worker{
-	int pid; 
+	pid_t pid; 
 	int wStart, wLoad; //description of worker assignment
 	int wCur, wCnt; //worker's most recent results
 	bool isUpToDate;
@@ -38,6 +38,24 @@ bool expectingLog = 0;
 //WORKER = PROCESS
 Segment *gapRoot = NULL, *gapHead = NULL;
 Worker *workRoot = NULL, *workHead = NULL;
+
+void popGap(){
+	Segment *nxt = gapRoot->nxt;
+	free(gapRoot);
+	gapRoot = nxt;
+	if(gapRoot == NULL)
+		gapHead = NULL;
+}
+
+void addGap(int gapStart, int gapSize){
+	if(gapHead == NULL)
+		gapRoot = gapHead = malloc(sizeof(Segment));
+	else{
+		gapHead->nxt = malloc(sizeof(Segment));
+		gapHead = gapHead->nxt;
+	}	
+	gapHead->nxt = NULL;
+}
 
 void extendWorkerList(){
 	Worker *prv = workHead; 
@@ -68,18 +86,13 @@ void deleteWorker(Worker *cur){
 		l->nxt = r;
 		r->prv = l;
 	}
+
+	if(cur->wCnt < cur->wLoad)
+		addGap(cur->wCur, cur->wLoad - cur->wCnt);
+
 	close(cur->pipefd[0]);
 	free(cur);
 }
-
-void popGapList(){
-	Segment *nxt = gapRoot->nxt;
-	free(gapRoot);
-	gapRoot = nxt;
-	if(gapRoot == NULL)
-		gapHead = NULL;
-}
-
 //Finds correct position and load of "ind" worker
 //Sets up its pipe
 //Creates new process and returns pid of child to parent 
@@ -98,18 +111,13 @@ bool createWorker(){
 	else{
 		workHead->wStart = workHead->wCur = gapRoot->segStart;
 		workHead->wLoad = gapRoot->segSize;
-		popGapList();
+		popGap();
 	}
 	workHead->wCnt = workHead->isUpToDate = 0;	
 	pipe(workHead->pipefd);
 	fcntl(workHead->pipefd[0], F_SETFL, O_NONBLOCK);		
 	
-	int p = fork();
-	//Parent process gets back pid of child process
-	if(p < 0){
-		printf("ERORORRO\n");
-		return 0;
-	}
+	pid_t p = fork();
 	if(p > 0){
 		close(workHead->pipefd[1]);
 		workHead->pid = p;
@@ -211,12 +219,12 @@ int main(int argc, char** argv){
 	sigemptyset(&block);
 	sigaddset(&block, SIGINT);
 	
-	while(proc < fileSz){
+	while(proc < fileSz || workerCount > 0){
 		sigprocmask(SIG_BLOCK, &block, NULL); //blocking
-		//look at each worker's pipe
-		int i = 0;
+		//look if each worker is ok and if there is something in his pipe
 		for(Worker *cur = workRoot; cur != NULL;){
 			Worker *nxt = cur->nxt; //MIN TO PEIRAKSEIS
+		
 			int ans[2];
 			if(read(cur->pipefd[0], &ans, sizeof(ans)) > 0){
 				//(ans[0], ans[1]) : (position of last processed byte, targets found so far)
@@ -225,16 +233,19 @@ int main(int argc, char** argv){
 				occ += ans[1] - cur->wCnt;
 				cur->wCur = ans[0] + 1;
 				cur->wCnt = ans[1];
-				cur->isUpToDate = 1;
-						
-				//If worker is done, delete him and create a new one
-				if(cur->wCur == cur->wStart + cur->wLoad){
-					deleteWorker(cur);
-					createWorker(); 
-					if(nxt == NULL)
-						nxt = workHead;
-				}
+				cur->isUpToDate = 1;	
 			}
+	
+			int status;
+			pid_t p = waitpid(cur->pid, &status, WNOHANG);
+			if(p == cur->pid){ 
+				printf("Child with pid: %d terminated\n", cur->pid);
+				deleteWorker(cur);
+				bool made = createWorker();
+				if(nxt == NULL && made)
+					nxt = workHead;
+			}
+
 			cur = nxt;
 		}
 		
@@ -249,6 +260,7 @@ int main(int argc, char** argv){
 		//Signals are handled here	
 		//TODO: HANDLE REQUESTS FROM FRONT-END			
 	}
-	printf("DONE\n");
+	printf("Final report:\n");
+	printReport();
 	return 0; 
 }
