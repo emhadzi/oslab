@@ -53,7 +53,9 @@ void addGap(int gapStart, int gapSize){
 	else{
 		gapHead->nxt = malloc(sizeof(Segment));
 		gapHead = gapHead->nxt;
-	}	
+	}
+	gapHead->segStart = gapStart;
+	gapHead->segSize = gapSize;	
 	gapHead->nxt = NULL;
 }
 
@@ -87,8 +89,9 @@ void deleteWorker(Worker *cur){
 		r->prv = l;
 	}
 
-	if(cur->wCnt < cur->wLoad)
-		addGap(cur->wCur, cur->wLoad - cur->wCnt);
+	int wProc = cur->wCur - cur->wStart;
+	if(wProc < cur->wLoad)
+		addGap(cur->wCur, cur->wLoad - wProc);
 
 	close(cur->pipefd[0]);
 	free(cur);
@@ -111,6 +114,7 @@ bool createWorker(){
 	else{
 		workHead->wStart = workHead->wCur = gapRoot->segStart;
 		workHead->wLoad = gapRoot->segSize;
+		printf("Filling gap (%d, %d)\n", workHead->wStart, workHead->wLoad);
 		popGap();
 	}
 	workHead->wCnt = workHead->isUpToDate = 0;	
@@ -127,8 +131,7 @@ bool createWorker(){
 	//Load child process executable	
 	printf("Worker %d: Starting\n", getpid());
 	
-	char indStr[12], startStr[12], sizeStr[12];
-	sprintf(indStr, "%d", getpid());
+	char startStr[12], sizeStr[12];
 	sprintf(startStr, "%d", workHead->wStart);
 	sprintf(sizeStr, "%d", workHead->wLoad);
 	//replace stdout with pipe write end
@@ -136,7 +139,7 @@ bool createWorker(){
 	close(workHead->pipefd[0]);			
 	close(workHead->pipefd[1]);
 	
-	char *args[] = {"a1.4-worker", indStr, fileName, startStr, sizeStr, target, NULL};	
+	char *args[] = {"a1.4-worker", fileName, startStr, sizeStr, target, NULL};	
 	if(execv("./a1.4-worker", args) == -1){
 		printf("Error loading exec\n");
 		return -1; 
@@ -159,15 +162,21 @@ void printReport(){
 	resetUpToDate();
 	expectingLog = 0;
 	//calculate individual progress
+	printf("%d Workers running:\n", workerCount);
 	for(Worker *cur = workRoot; cur != NULL; cur = cur->nxt){
 		int wProc = cur->wCur - cur->wStart;
 		double per = (wProc * 100.0) / cur->wLoad;
 		double perFound = (cur->wCnt * 100.0) / wProc;
-		printf("Worker (%d): Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", cur->pid, wProc, cur->wLoad, per, cur->wCnt, perFound);
+		printf("\tWorker (%d): Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", cur->pid, wProc, cur->wLoad, per, cur->wCnt, perFound);
 	}
 
 	//total resutlts
 	double totPer = (proc * 100.0) / fileSz, totPerFound = (occ * 100.0) / proc;
+	printf("Front: %d\n", front);
+	printf("Gaps:\n");
+	for(Segment *cur = gapRoot; cur != NULL; cur = cur->nxt)
+		printf("\tStart: %d, Length: %d", cur->segStart, cur->segSize);
+
 	printf("Summary: Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", proc, fileSz, totPer, occ, totPerFound);
 }
 

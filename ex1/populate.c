@@ -1,5 +1,5 @@
 #include <stdio.h>
-#define SZ 10000000
+#define SZ 1000000
 
 int main(){
 	FILE *fpw = fopen("fin.txt", "w+");

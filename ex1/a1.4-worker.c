@@ -1,5 +1,5 @@
-//Worker receives as arguments : (1) his index, (2) input file name (to count from), (3) position (int bytes) to start reading
-//(4) number of bytes to read, (5) character to count 
+//Worker receives as arguments : (1) input file name (to count from), (2) position (int bytes) to start reading
+//(3) number of bytes to read, (4) character to count 
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -10,7 +10,7 @@
 #define READ_DELAY 1
 
 int startPos, endPos;
-int workerId, cur, cnt;
+int cur, cnt;
 
 void write_to_pipe(int lastProc, int count){ //lastProc: last processed byte (from start of file)
 	int msg[2];
@@ -26,13 +26,12 @@ void handle_log(int sig){
 }
 
 int main(int argc, char **argv){
-	if(argc < 6){
+	if(argc < 5){
 		//printf("Invalid arguments\n");
 		return -1; 
 	}
 
-	workerId = atoi(argv[1]);
-	int fd = open(argv[2], O_RDONLY);
+	int fd = open(argv[1], O_RDONLY);
 	if(fd < 0){
 		//printf("Worker %d: Error opening file to read\n", workerId);
 		return -1;
@@ -44,7 +43,7 @@ int main(int argc, char **argv){
 
 	sigaction(SIGUSR1, &slog, NULL);
 
-	startPos = atoi(argv[3]), endPos = startPos + atoi(argv[4]) - 1;
+	startPos = atoi(argv[2]), endPos = startPos + atoi(argv[3]) - 1;
 	cur = startPos, cnt = 0;
 	lseek(fd, startPos, SEEK_SET);
 	char buff[BUFF_SIZE];
@@ -62,7 +61,7 @@ int main(int argc, char **argv){
 		sleep(READ_DELAY);
 		int batch = 0;
 		for(int j = 0; j < readSz; j++)
-			batch += buff[j] == argv[5][0];
+			batch += buff[j] == argv[4][0];
 		cnt += batch;
 		cur += readSz;	
 		sigprocmask(SIG_UNBLOCK, &unblock, NULL);
