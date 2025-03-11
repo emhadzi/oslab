@@ -1,7 +1,6 @@
-//got eepy sleepy, will continue work tomorrow
-// also is printf cheating? Should I use write(STDOUT_FILENO, ..)?
 
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -15,56 +14,66 @@ enum Function {
 };
 
 int (*fns[FN_NUMBER])(int n);
-char tgt;
-int fdr;
-char *fnNames[FN_NUMBER];
-
+char *fnNames[FN_NUMBER]={"add", "delete", "show"};
 
 int main(int argc, char *argv[]) {
+    // check arguments
     if (argc != 3) {
         printf("Invalid argument list\n");
         exit(-1);
     }
-    fdr = open(argv[1], O_RDONLY | O_EXCL);
+    int fdr = open(argv[1], O_RDONLY | O_EXCL);
     if(fdr < 0){
         printf("Could not open file\n");
         exit(-1);
     }
+    close(fdr);
     if(strlen(argv[2]) != 1){
         printf("Search target should be a character\n");
         exit(-1);
     }
-    tgt = *argv[2];
-    printf("File is %s \n", argv[1]);
-    printf("Target char is %c \n", *argv[2]);
-    /*
-    int status=1;
+    char tgtChar = *argv[2];
+    // create dispatcher
+    int p = fork();
+    if(p < 0){
+        printf("Could not create dispatcher\n")
+        exit(-1);
+    }
+    char *args[]={"./a1.4-dispatcher", tgt, NULL};
+    if(p == 0){
+        if(!execv(args[0], args)){
+
+        }
+    }
+
+    if(p == 0)
     char cmd[CMD_SIZE];
     do{
+        // parse command (cmd)
         int cmdSize = read(STDIN_FILENO, cmd, CMD_SIZE);
         if(cmdSize < 0)
             continue;
-        char *cmdName = strtok(cmd, " ");
-        char *cmdArg = strtok(cmd, " ");
-        char *cmdRem = strtok(cmd, " ");
-        if(!cmdName || !cmdArg || cmdRem){
+        char *tokPtr;
+        char *cmdName = strtok_r(cmd, " ", &tokPtr);
+        char *cmdArg = strtok_r(NULL, "\n", &tokPtr);
+        if(!cmdName || !cmdArg){
             printf("Invalid command structure\n");
+            continue;
         }
         int i=0;
         for(i=0; i<FN_NUMBER; ++i){
-            if(!strcmp(cmd,fnNames[i]))
+            if(!strcmp(cmdName,fnNames[i]))
                 break;
         }
         if(i == FN_NUMBER){
-            printf("Command name not found\n");
+            printf("Command not found\n");
+            continue;
         }
-        char *cmdArgRem;
-        int cmdArgInt = strtol(cmdArg, &cmdArgRem, 10);
-        if(!cmdArgRem){
-            printf("Command argument should be an integer");
+        char *intEndPtr;
+        int cmdArgInt = strtol(cmdArg, &intEndPtr, 10);
+        if(*intEndPtr != '\0'){
+            printf("Command argument should be an integer\n");
+            continue;
         }
-        int fd1[1];
-        pipe()
-    }while();
-     */
+    }while(1);
 }
