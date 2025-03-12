@@ -17,7 +17,7 @@ a1.2-fork: a1.2-fork.o
 a1.3-comm: a1.3-comm.o
 	$(CC) $(CFLAGS) $^ -o $@
 
-a1.4-frontend: a1.4-frontend.o util.o config.h
+a1.4-frontend: a1.4-frontend.o #util.o config.h
 	$(CC) $(CFLAGS) $^ -o $@
 	
 a1.4-dispatcher: a1.4-dispatcher.o 

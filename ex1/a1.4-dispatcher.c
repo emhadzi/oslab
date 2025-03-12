@@ -1,6 +1,3 @@
-//TODO: have "smooth" finish (no children crashing)
-//TODO: support removing children
-
 #include <signal.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -23,6 +20,7 @@ typedef struct Worker{
 	int pipefd[2];
 	struct Worker *nxt, *prv; //pointer to next and previous worker in list
 } Worker;
+//WORKER = PROCESS
 
 typedef struct Segment{
 	int segStart, segSize;
@@ -35,7 +33,6 @@ int front = 0, proc = 0, occ = 0;
 char *target, *fileName;
 bool expectingLog = 0;
 
-//WORKER = PROCESS
 Segment *gapRoot = NULL, *gapHead = NULL;
 Worker *workRoot = NULL, *workHead = NULL;
 
@@ -96,7 +93,7 @@ void deleteWorker(Worker *cur){
 	close(cur->pipefd[0]);
 	free(cur);
 }
-//Finds correct position and load of "ind" worker
+//Finds correct position and load of next worker
 //Sets up its pipe
 //Creates new process and returns pid of child to parent 
 bool createWorker(){
@@ -128,7 +125,7 @@ bool createWorker(){
 		return 1;
 	}
 
-	//Load child process executable	
+	//load child process executable	
 	printf("Worker %d: Starting\n", getpid());
 	
 	char startStr[12], sizeStr[12];
@@ -174,15 +171,11 @@ void printReport(){
 	double totPer = (proc * 100.0) / fileSz, totPerFound = (occ * 100.0) / proc;
 	printf("Front: %d\n", front);
 	printf("Gaps:\n");
-	for(Segment *cur = gapRoot; cur != NULL; cur = cur->nxt)
+	
+for(Segment *cur = gapRoot; cur != NULL; cur = cur->nxt)
 		printf("\tStart: %d, Length: %d", cur->segStart, cur->segSize);
 
 	printf("Summary: Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", proc, fileSz, totPer, occ, totPerFound);
-}
-
-void handle_log(int sig){
-	printf("Requesting report\n");
-	requestReport();
 }
 
 //argv[1] : fin.txt
@@ -218,24 +211,17 @@ int main(int argc, char** argv){
 	for(int ind = 0; ind < initWorkerCount; ind++)
 		createWorker(ind);
 	printf("Successfully created %d workers\n", workerCount);
-		
-	struct sigaction slog;
-	slog.sa_handler = handle_log;
-	sigemptyset(&slog.sa_mask);
-	sigaction(SIGINT, &slog, NULL);
-
-	sigset_t block;
-	sigemptyset(&block);
-	sigaddset(&block, SIGINT);
+	
+	//make reading from stdin non-blocking	
+	fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);		
 	
 	while(proc < fileSz || workerCount > 0){
-		sigprocmask(SIG_BLOCK, &block, NULL); //blocking
 		//look if each worker is ok and if there is something in his pipe
 		for(Worker *cur = workRoot; cur != NULL;){
 			Worker *nxt = cur->nxt; //MIN TO PEIRAKSEIS
 		
 			int ans[2];
-			if(read(cur->pipefd[0], &ans, sizeof(ans)) > 0){
+			if(read(cur->pipefd[0], ans, sizeof(ans)) > 0){
 				//(ans[0], ans[1]) : (position of last processed byte, targets found so far)
 				//update global stats
 				proc += ans[0] + 1 - cur->wCur;
@@ -265,9 +251,26 @@ int main(int argc, char** argv){
 		if(logAfter)
 			printReport();
 
-		sigprocmask(SIG_UNBLOCK, &block, NULL); //unblocking
-		//Signals are handled here	
-		//TODO: HANDLE REQUESTS FROM FRONT-END			
+		//handle request from frontend
+		int req[2];
+		while(read(STDIN_FILENO, req, sizeof(req)) > 0){
+			switch(req[0]){
+				case 0: //add
+					for(int i = 0; i < req[1]; i++)
+						createWorker();
+					break;	
+				case 1: //delete
+					for(int i = 0; i < req[1] && workerCount > 0; i++)
+						deleteWorker(workRoot);
+					break;
+				case 2: //log
+					printf("Requesting report\n");
+					requestReport();
+					break;
+				default:
+					return -1;
+			}
+		}
 	}
 	printf("Final report:\n");
 	printReport();
