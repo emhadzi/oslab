@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
         printf("Could not create dispatcher\n");
         exit(-1);
     }
-    char *args[]={"./a1.4-dispatcher", argv[1], argv[2], "2", NULL};
+    char *args[]={"./a1.4-dispatcher", argv[1], argv[2], NULL};
     if(p == 0){
         dup2(pipefd[0], STDIN_FILENO);
         close(pipefd[0]);

@@ -9,6 +9,7 @@
 #define CHUNK_SIZE 4096
 #define WINDOW_RAT 0.05
 #define MIN_WORKER_CHUNKS 5
+#define NORMAL_WORKER_CHUNKS 20 
 #define min(a, b) (((a) < (b) ? (a) : (b)))
 #define max(a, b) (((a) < (b) ? (b) : (a)))
 
@@ -170,10 +171,15 @@ void printReport(){
 	//total resutlts
 	double totPer = (proc * 100.0) / fileSz, totPerFound = (occ * 100.0) / proc;
 	printf("Front: %d\n", front);
-	printf("Gaps:\n");
 	
-for(Segment *cur = gapRoot; cur != NULL; cur = cur->nxt)
-		printf("\tStart: %d, Length: %d", cur->segStart, cur->segSize);
+	if(gapRoot == NULL)
+		printf("No gaps found\n");	
+	else
+		printf("Gaps:\n");
+	
+
+	for(Segment *cur = gapRoot; cur != NULL; cur = cur->nxt)
+		printf("\tStart: %d, Length: %d\n", cur->segStart, cur->segSize);
 
 	printf("Summary: Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", proc, fileSz, totPer, occ, totPerFound);
 }
@@ -199,14 +205,12 @@ int main(int argc, char** argv){
 	printf("Target file size: %d\n", fileSz);
 	close(fdr);	
 
-	int initWorkerCount = (argv[3] == NULL ? 2 : atoi(argv[3]));	
+	int initWorkerCount = (argv[3] == NULL ? 0 : atoi(argv[3]));	
 
+	//ALTERNATIVE:
 	//Out of the total chunks, first batch of workers should occupy aprox FIRST_JOB%
 	//So determine an aproximate load for each worker
-	//ALTERNATIVE: DEFINE NORMALWLOAD FROM THE START 	
-	int chunks = fileSz / CHUNK_SIZE + (fileSz % CHUNK_SIZE > 0 ? 1 : 0);
-	int windowChunks = chunks * WINDOW_RAT;
-	normalWLoad = CHUNK_SIZE * max((windowChunks / initWorkerCount), MIN_WORKER_CHUNKS);
+	normalWLoad = CHUNK_SIZE * NORMAL_WORKER_CHUNKS;
 	
 	for(int ind = 0; ind < initWorkerCount; ind++)
 		createWorker(ind);

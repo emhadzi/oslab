@@ -49,10 +49,9 @@ int main(int argc, char **argv){
 	char buff[BUFF_SIZE];
 
 	//For signal blocking to work:
-	sigset_t block, unblock;
-	sigemptyset(&block), sigemptyset(&unblock);
-	sigaddset(&block, SIGINT), sigaddset(&block, SIGUSR1);
-	sigaddset(&unblock, SIGUSR1);
+	sigset_t block;
+	sigemptyset(&block);
+	sigaddset(&block, SIGUSR1);
 	//Dispatcher should allways provide workers with chunks that are alligned with BUFF_SIZE
 	//Final chunk might not be full
 	while(cur < endPos){
@@ -64,7 +63,7 @@ int main(int argc, char **argv){
 			batch += buff[j] == argv[4][0];
 		cnt += batch;
 		cur += readSz;	
-		sigprocmask(SIG_UNBLOCK, &unblock, NULL);
+		sigprocmask(SIG_UNBLOCK, &block, NULL);
 	} 
 	close(fd);
 	
