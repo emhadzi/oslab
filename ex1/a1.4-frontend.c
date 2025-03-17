@@ -73,6 +73,5 @@ int main(int argc, char *argv[]) {
         }
         int buff[2]={fID,cmdArgInt};
         write(pipefd[1], buff, sizeof(buff));
-        printf("Buff 0 :%i, 1: %i\n", buff[0],buff[1]);
     }while(1);
 }

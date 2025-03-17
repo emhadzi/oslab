@@ -3,11 +3,20 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <stdbool.h>
+#include <string.h>
 #define BATCH_SIZE 16384
+#define SLEEP_DURATION 5000
 #define min(a, b) (((a) < (b) ? (a) : (b)))
 
-int main(int argvc, char** argv){
-	if(argv[1] == NULL || argv[2] == NULL || argv[3] == NULL){
+int workers, active;
+
+void handler(int sig){
+	printf("There are %d active workers\n", active); 
+} 
+
+int main(int argc, char** argv){
+	if(argc < 3){
 		printf("Incorrect arguments provided\n");
 		return -1;
 	}
@@ -22,21 +31,30 @@ int main(int argvc, char** argv){
 	printf("Target file size: %d\n", sz);
 	close(fdr);	
 
-	int workers = (argv[4] == NULL ? 2 : atoi(argv[4]));	
-	int workerSz = sz / workers + (sz % workers > 0 ? 1 : 0);
+	workers = (argv[3] == NULL ? 2 : atoi(argv[3]));	
+	int workerSz = (sz + workers - 1) / workers;
  	printf("Assigning chunks of up to %d bytes to each worker\n", workerSz);
 
 	pid_t pid[workers];
+	bool done[workers];
+	memset(done, 0, sizeof(done));
+
 	int pipefd[workers][2];
+	
+	//block SIGINT for all processes
+	sigset_t block;
+	sigemptyset(&block);
+	sigaddset(&block, SIGINT);	
+	sigprocmask(SIG_BLOCK, &block, NULL);
 
 	int ind = 0, p = 1;
 	for(; ind < workers && p > 0; ind++){
 		if(pipe(pipefd[ind]) == -1){
 			printf("Error creating pipe for %d worker\n");
 			p = -1;
-		}
-		
+		}	
 		else{
+			fcntl(pipefd[ind][0], F_SETFL, O_NONBLOCK);		
 			p = fork();
 			if(p > 0)
 				pid[ind] = p;
@@ -57,6 +75,8 @@ int main(int argvc, char** argv){
 		printf("Worker %d: Starting\n", ind);
 		//close ununsed (by child) reading end of pipe
 		close(pipefd[ind-1][0]);	
+		//block SIGINT
+		//sigprocmask(SIG_BLOCK, &block, NULL);
 	
 		//create new file descriptor
 		fdr = open(argv[1], O_RDONLY, 0666);	
@@ -77,11 +97,11 @@ int main(int argvc, char** argv){
 		for(int curPos = startPos; curPos <= endPos;){	
 			int readSz = min(BATCH_SIZE, endPos - curPos + 1);	
 			read(fdr, buff, readSz);
-			sleep(0.1);
+			usleep(SLEEP_DURATION);
 			curPos += readSz;			
 
 			for(int i = 0; i < readSz; i++)
-				ans += buff[i] == argv[3][0]; 
+				ans += buff[i] == argv[2][0]; 
 		} 		
 		close(fdr);
 
@@ -95,24 +115,43 @@ int main(int argvc, char** argv){
 
 	else{
 		//only parent process will land here if all children are created successfully
+		active = workers;
 		printf("Successfully created %d workers\n", workers);
 		//wait for all children to finish and report result
 		//if one child fails remember it, after all finish, report it
-		int tot = 0, ok = 1;
-		for(int i = 0; i < workers; i++){		
-			int wstatus;
-			pid_t done = waitpid(pid[i], &wstatus, 0);
-			
-			if(wstatus != 0){
-				printf("Worker %d failed\n", i+1);
-				ok = 0;
-			}
-			else{
-				int res;
-				read(pipefd[i][0], &res, sizeof(int));
-				close(pipefd[i][0]); 
-				tot += res;
-				printf("Worker %d successfully accounted\n", i+1);
+		int tot = 0;
+		bool ok = 1;	
+	
+		struct sigaction slog;
+		slog.sa_handler = handler;
+		slog.sa_flags = 0;
+		sigemptyset(&slog.sa_mask);
+		sigaction(SIGINT, &slog, NULL);		
+	
+		while(active > 0){
+			for(int i = 0; i < workers; i++){
+				if(done[i])
+					continue;		
+				int wstatus;
+				sigprocmask(SIG_BLOCK, &block, NULL);
+				pid_t pdone = waitpid(pid[i], &wstatus, WNOHANG);
+				sigprocmask(SIG_UNBLOCK, &block, NULL);	
+				//printf("HI");			
+				if(pdone == pid[i]){
+					int res;
+					int sz = read(pipefd[i][0], &res, sizeof(int));
+					if(sz > 0){
+						close(pipefd[i][0]); 	
+						printf("Worker (%d): Successfully accounted\n", i+1);
+						tot += res;
+					}
+					else{
+						printf("Worker (%d): Failed\n", i+1);
+						ok = 0;
+					}
+					done[i] = 1;
+					active--;
+				}
 			}
 		}
 
