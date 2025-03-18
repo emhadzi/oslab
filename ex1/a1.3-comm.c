@@ -31,8 +31,9 @@ int main(int argc, char** argv){
 	printf("Target file size: %d\n", sz);
 	close(fdr);	
 
+	
 	workers = (argv[3] == NULL ? 2 : atoi(argv[3]));	
-	int workerSz = (sz + workers - 1) / workers;
+	int workerSz = sz / workers, rem = sz % workers;
  	printf("Assigning chunks of up to %d bytes to each worker\n", workerSz);
 
 	pid_t pid[workers];
@@ -71,10 +72,11 @@ int main(int argc, char** argv){
 	}
 
 	else if(p == 0){
+		int i = ind-1;
 		//only child/worker will land here
 		printf("Worker %d: Starting\n", ind);
 		//close ununsed (by child) reading end of pipe
-		close(pipefd[ind-1][0]);	
+		close(pipefd[i][0]);	
 		//block SIGINT
 		//sigprocmask(SIG_BLOCK, &block, NULL);
 	
@@ -86,8 +88,15 @@ int main(int argc, char** argv){
 		}	
 
 		//deterimine starting and ending positions (inclusive)
-		int startPos = (ind-1) * workerSz;
-		int endPos = min(sz-1, ind * workerSz - 1);
+		int startPos, endPos;
+		if(i < rem){
+			startPos = i * (workerSz+1);
+			endPos = startPos + workerSz;
+		}
+		else{
+			startPos = rem + i * workerSz;
+			endPos = startPos + workerSz - 1;
+		}
 		int ans = 0;
 		char buff[BATCH_SIZE];
 
@@ -106,8 +115,8 @@ int main(int argc, char** argv){
 		close(fdr);
 
 		//write result to pipe
-		write(pipefd[ind-1][1], &ans, sizeof(int));
-		close(pipefd[ind-1][1]);
+		write(pipefd[i][1], &ans, sizeof(int));
+		close(pipefd[i][1]);
 		printf("Worker %d: Done\n", ind);		
 
 		return 0;
