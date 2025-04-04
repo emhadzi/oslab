@@ -145,7 +145,7 @@ int main(int argc, char** argv){
 				sigprocmask(SIG_BLOCK, &block, NULL);
 				pid_t pdone = waitpid(pid[i], &wstatus, WNOHANG);
 				sigprocmask(SIG_UNBLOCK, &block, NULL);	
-				//printf("HI");			
+				
 				if(pdone == pid[i]){
 					int res;
 					int sz = read(pipefd[i][0], &res, sizeof(int));
