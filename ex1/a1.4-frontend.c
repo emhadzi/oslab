@@ -1,15 +1,13 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
-#define FN_NUMBER 3
-#define CMD_SIZE 128
+#include "config.h"
 
-char *fnNames[FN_NUMBER]={"add", "delete", "show"};
+char *fnNames[FN_NUMBER];
 
 int main(int argc, char *argv[]) {
-    // check arguments
+	fnNames[ADD] = "add";
+	fnNames[DELETE] = "delete";
+	fnNames[SHOW] = "show";
+    
+	// check arguments
     if (argc != 3) {
         printf("Invalid argument list\n");
         exit(-1);
@@ -46,6 +44,7 @@ int main(int argc, char *argv[]) {
     char cmd[CMD_SIZE];
     do{
         // parse command (cmd)
+		// TODO: show requires no argument 
         int cmdSize = read(STDIN_FILENO, cmd, CMD_SIZE);
         if(cmdSize < 0)
             continue;

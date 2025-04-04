@@ -1,9 +1,12 @@
 #include <stdio.h>
-#define SZ 100000000
+#include <stdlib.h>
+#define SZ 200000000
 
 int main(){
 	FILE *fpw = fopen("fin.txt", "w+");
-	for(int i = 0; i < SZ/6; i++)	
-    	fprintf(fpw, "abcdef");
+	for(int i = 0; i < SZ; i++)	
+    	fprintf(fpw, "%c", 'a' + (rand() % 26));
     fclose(fpw);
 }
+//to check number of occurances of some character:
+//tr -cd 'a' < fin.txt | wc -c

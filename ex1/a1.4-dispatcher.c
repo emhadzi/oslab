@@ -1,17 +1,4 @@
-#include <signal.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <stdbool.h>
-#define CHUNK_SIZE 4096
-#define WINDOW_RAT 0.05
-#define MIN_WORKER_CHUNKS 5
-#define NORMAL_WORKER_CHUNKS 20 
-#define min(a, b) (((a) < (b) ? (a) : (b)))
-#define max(a, b) (((a) < (b) ? (b) : (a)))
+#include "config.h"
 
 typedef struct Worker{
 	pid_t pid; 
@@ -99,8 +86,15 @@ void deleteWorker(Worker *cur){
 //Creates new process and returns pid of child to parent 
 bool createWorker(){
 	//no job to assign
-	if(gapRoot == NULL && front == fileSz)
+	if(gapRoot == NULL && front == fileSz){
+		printf("Could not create worker, no job to assign\n");
 		return 0;
+	}
+	//max worker capacity reached
+	if(workerCount >= MAX_WORKER_COUNT){
+		printf("Could not create worker, max capacity of %d workers reached\n", MAX_WORKER_COUNT);	
+		return 0;
+	}
 
 	workerCount++;
 	extendWorkerList();
@@ -278,5 +272,6 @@ int main(int argc, char** argv){
 	}
 	printf("Final report:\n");
 	printReport();
+	kill(getppid(), SIGKILL);
 	return 0; 
 }

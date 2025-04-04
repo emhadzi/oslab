@@ -1,13 +1,7 @@
 //Worker receives as arguments : (1) input file name (to count from), (2) position (int bytes) to start reading
 //(3) number of bytes to read, (4) character to count 
 
-#include <fcntl.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <signal.h>
-#define BUFF_SIZE 4096
-#define READ_DELAY 1
+#include "config.h"
 
 int startPos, endPos;
 int cur, cnt;
