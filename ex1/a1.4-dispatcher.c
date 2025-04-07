@@ -156,6 +156,7 @@ void printProgressbar(char* name, double per){
 	struct winsize w;
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
     int cols = w.ws_col;
+    printf("%i columns\n", cols);
     int barSize = cols*PROGRESSBAR_WIDTH/100;
 	printf("\033[0;%im[", PRINT_COLOR);
     int i=strlen(name);
