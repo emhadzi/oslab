@@ -150,6 +150,25 @@ void requestReport(){
 		kill(cur->pid, SIGUSR1);
 }
 
+void printProgress(char name[], double per){
+  	printf("%s : ",name);
+	struct winsize w;
+	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    int cols = w.ws_col;
+    int barSize = cols*PROGRESSBAR_WIDTH/100;
+	printf("\033[0;%im[", PRINT_COLOR);
+    int i=sizeof(name)-1;
+	for(i=0; i<int(per*barSize); i++){
+        printf("=");
+	}
+    printf("%.2f%%", int(per*100));
+    i+=5;
+    for(; i<barSize; i++){
+    	printf("-");
+    }
+    printf("]\033[0m\n");
+}
+
 void printReport(){
 	resetUpToDate();
 	expectingLog = 0;
@@ -159,9 +178,6 @@ void printReport(){
 		int wProc = cur->wCur - cur->wStart;
 		double per = (wProc * 100.0) / cur->wLoad;
 		double perFound = (cur->wCnt * 100.0) / wProc;
-		struct winsize w;
-		ioctl(STDOUT_FILENO, TIOCGWINSZ, &w)
-        for()
 		printf("\tWorker (%d): Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", cur->pid, wProc, cur->wLoad, per, cur->wCnt, perFound);
 	}
 
@@ -179,6 +195,7 @@ void printReport(){
 		printf("\tStart: %d, Length: %d\n", cur->segStart, cur->segSize);
 
 	printf("Summary: Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", proc, fileSz, totPer, occ, totPerFound);
+    printProgress("total progress", totPer);
 }
 
 //argv[1] : fin.txt
