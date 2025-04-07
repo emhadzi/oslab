@@ -32,5 +32,5 @@
 #define MAX_WORKER_COUNT 1000
 
 //printing
-#define PRINT_COLOR = 32
-#define PROGRESSBAR_WIDTH = 80
+#define PRINT_COLOR 32
+#define PROGRESSBAR_WIDTH 80

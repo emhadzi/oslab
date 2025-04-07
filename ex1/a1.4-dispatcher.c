@@ -151,14 +151,14 @@ void requestReport(){
 }
 
 // printing fu
-void printProgressbar(char name[], double per){
+void printProgressbar(char* name, double per){
   	printf("%s : ",name);
 	struct winsize w;
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
     int cols = w.ws_col;
     int barSize = cols*PROGRESSBAR_WIDTH/100;
 	printf("\033[0;%im[", PRINT_COLOR);
-    int i=sizeof(name)-1;
+    int i=strlen(name);
 	for(i=0; i<(int)(per*barSize); i++){
         printf("=");
 	}
