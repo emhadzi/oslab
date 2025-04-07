@@ -51,7 +51,7 @@ int main(int argc, char **argv){
 	while(cur < endPos){
 		sigprocmask(SIG_BLOCK, &block, NULL); //blocking
 		int readSz = read(fd, buff, BUFF_SIZE); 
-		sleep(READ_DELAY);
+		usleep(READ_DELAY);
 		int batch = 0;
 		for(int j = 0; j < readSz; j++)
 			batch += buff[j] == argv[4][0];
