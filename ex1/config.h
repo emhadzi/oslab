@@ -6,7 +6,9 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
 #include <stdbool.h>
+
 
 //for frontend
 #define FN_NUMBER 3

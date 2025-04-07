@@ -159,6 +159,9 @@ void printReport(){
 		int wProc = cur->wCur - cur->wStart;
 		double per = (wProc * 100.0) / cur->wLoad;
 		double perFound = (cur->wCnt * 100.0) / wProc;
+		struct winsize w;
+		ioctl(STDOUT_FILENO, TIOCGWINSZ, &w)
+        for()
 		printf("\tWorker (%d): Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", cur->pid, wProc, cur->wLoad, per, cur->wCnt, perFound);
 	}
 

@@ -1,23 +1,31 @@
 #include "config.h"
 
+// create buffer for commands
 char *fnNames[FN_NUMBER];
 
 int main(int argc, char *argv[]) {
-	fnNames[ADD] = "add";
+
+    // load commands from config
+    fnNames[ADD] = "add";
 	fnNames[DELETE] = "delete";
 	fnNames[SHOW] = "show";
     
 	// check arguments
+
     if (argc != 3) {
         printf("Invalid argument list\n");
         exit(-1);
     }
+
+    // test that target file is valid
     int fdr = open(argv[1], O_RDONLY | O_EXCL);
     if(fdr < 0){
         printf("Could not open file\n");
         exit(-1);
     }
     close(fdr);
+
+    //
     if(strlen(argv[2]) != 1){
         printf("Search target should be a character\n");
         exit(-1);
