@@ -150,7 +150,8 @@ void requestReport(){
 		kill(cur->pid, SIGUSR1);
 }
 
-void printProgress(char name[], double per){
+// printing fu
+void printProgressbar(char name[], double per){
   	printf("%s : ",name);
 	struct winsize w;
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
@@ -195,7 +196,7 @@ void printReport(){
 		printf("\tStart: %d, Length: %d\n", cur->segStart, cur->segSize);
 
 	printf("Summary: Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", proc, fileSz, totPer, occ, totPerFound);
-    printProgress("total progress", totPer);
+    printProgressbar("total progress", totPer);
 }
 
 //argv[1] : fin.txt
