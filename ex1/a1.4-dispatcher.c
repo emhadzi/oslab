@@ -197,7 +197,7 @@ void printReport(){
 		printf("\tStart: %d, Length: %d\n", cur->segStart, cur->segSize);
 
 	printf("Summary: Processed %d out of %d characters (%f%). Found %d occurances so far (%f%)\n", proc, fileSz, totPer, occ, totPerFound);
-    printProgressbar("total progress", totPer);
+    printProgressbar("total progress", totPer/100);
 }
 
 //argv[1] : fin.txt
