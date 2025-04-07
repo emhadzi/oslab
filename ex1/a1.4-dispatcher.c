@@ -160,7 +160,7 @@ void printProgressbar(char* name, double per){
     int barSize = cols*PROGRESSBAR_WIDTH/100;
 	printf("\033[0;%im[", PRINT_COLOR);
     int i=strlen(name);
-	for(i=0; i<(int)(per*barSize); i++){
+	for(; i<(int)(per*barSize); i++){
         printf("=");
 	}
     printf("%.2f%%", (int)(per*100));
