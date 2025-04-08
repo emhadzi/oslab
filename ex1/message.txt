@@ -1,0 +1,4 @@
+Stop blocking SIGINT from children 
+Change default parameter for dispatcher to 0 children
+Use NORMAL_WORKER_CHUNKS to assign jobs
+fix some UI issues
