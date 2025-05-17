@@ -26,7 +26,7 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define MANDEL_MAX_ITERATION 100000
 #define MAXN 1000  	// Maximum number of calculation threads
-#define M 10 		// Size of buffer in lines
+// #define M 10 		// Size of buffer in lines
 /***************************
  * Compile-time parameters *
  ***************************/
@@ -36,7 +36,7 @@
 */
 int y_chars = 400;
 int x_chars = 800;
-int n;				// Number of threads
+int n, M;				// Number of threads
 int **buff;			// Output buffer
 int lines_done = 0; // Number of lines done
 
@@ -163,6 +163,7 @@ int main(int argc, char *argv[])
 	setup_sigint_handler();
 
 	n = atoi(argv[1]);
+	M = atoi(argv[2]);
 
 	pthread_t t[MAXN];
 	pthread_t tout;
