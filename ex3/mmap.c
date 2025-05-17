@@ -244,7 +244,7 @@ int main(void)
 		perror("sysconf");
 		exit(EXIT_FAILURE);
 	}
-	void *buffer = mmap(NULL, 8*pagesize, PROT_READ | PROT_WRITE | PROT_EXEC,
+	void *buffer = mmap(NULL, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC,
 						MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	if (buffer == MAP_FAILED) {
 		perror("mmap");
@@ -259,10 +259,8 @@ int main(void)
 	printf(RED "\nStep 3: Find and print the physical address of the "
 		"buffer in main memory. What do you see?\n" RESET);
 	press_enter();
-	/*
-	 * TODO: Write your code here to complete Step 3.
-	 */
 
+	get_physical_address((uint64_t)buffer);
 
 	/*
 	 * Step 4: Write zeros to the buffer and repeat Step 3.
