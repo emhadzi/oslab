@@ -309,9 +309,11 @@ int main(void)
 		close(fd);
 		exit(EXIT_FAILURE);
 	}
-
+	printf("Contents of file.txt are:\n");
     // Print contents of file
 	write(STDOUT_FILENO, filetxt, filesize);
+
+	show_maps();
 
 	/*
 	 * Step 6: Use mmap(2) to allocate a shared buffer of 1 page. Use
@@ -321,10 +323,14 @@ int main(void)
 		"equal to 1 page. Initialize the buffer and print the new "
 		"mapping information that has been created.\n" RESET);
 	press_enter();
-	/*
-	 * TODO: Write your code here to complete Step 6.
-	 */
 
+	void *bufferShared = mmap(NULL, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC,
+						 MAP_SHARED | MAP_ANONYMOUS, 0, 0);
+	if (bufferShared == MAP_FAILED) {
+		perror("mmap");
+		exit(EXIT_FAILURE);
+	}
+	show_maps();
 
 	p = fork();
 	if (p < 0)
