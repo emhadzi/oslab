@@ -261,18 +261,17 @@ int main(void)
 	press_enter();
 
 	get_physical_address((uint64_t)buffer);
-	((char*)buffer)[0] = 'a';
-	get_physical_address((uint64_t)buffer);
+
 	/*
 	 * Step 4: Write zeros to the buffer and repeat Step 3.
 	 */
 	printf(RED "\nStep 4: Initialize your buffer with zeros and repeat "
 		"Step 3. What happened?\n" RESET);
 	press_enter();
-	/*
-	 * TODO: Write your code here to complete Step 4.
-	 */
 
+    for(int i = 0; i < pagesize/sizeof(int); i++) {
+    	(*int)buffer[i]=0;
+    }
 
 	/*
 	 * Step 5: Use mmap(2) to map file.txt (memory-mapped files) and print
