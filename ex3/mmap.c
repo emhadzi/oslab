@@ -244,7 +244,7 @@ int main(void)
 		perror("sysconf");
 		exit(EXIT_FAILURE);
 	}
-	void *buffer = mmap(NULL, pagesize, PROT_READ | PROT_WRITE,
+	void *buffer = mmap(NULL, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC,
 						MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	if (buffer == MAP_FAILED) {
 		perror("mmap");
