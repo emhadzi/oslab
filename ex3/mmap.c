@@ -274,6 +274,7 @@ int main(void)
     }
 
     get_physical_address((uint64_t)buffer);
+
 	/*
 	 * Step 5: Use mmap(2) to map file.txt (memory-mapped files) and print
 	 * its content. Use file_shared_buf.

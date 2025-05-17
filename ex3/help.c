@@ -120,6 +120,7 @@ out:
  */
 uint64_t get_physical_address(uint64_t va)
 {
+  	printf("nigga\n");
 	int pmfd = 0;
 	uint64_t vpn = 0, offset = 0, pagemap_entry = 0;
 
