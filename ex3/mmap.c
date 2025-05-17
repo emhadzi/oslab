@@ -261,7 +261,8 @@ int main(void)
 	press_enter();
 
 	get_physical_address((uint64_t)buffer);
-
+	((char*)buffer)[0] = 'a';
+	get_physical_address((uint64_t)buffer);
 	/*
 	 * Step 4: Write zeros to the buffer and repeat Step 3.
 	 */
