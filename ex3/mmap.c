@@ -228,9 +228,7 @@ int main(void)
 	printf(RED "\nStep 1: Print the virtual address space map of this "
 		"process [%d].\n" RESET, mypid);
 	press_enter();
-	/*
-	 * TODO: Write your code here to complete Step 1.
-	 */
+
 	show_maps();
 
 	/*
@@ -240,10 +238,19 @@ int main(void)
 	printf(RED "\nStep 2: Use mmap(2) to allocate a private buffer of "
 		"size equal to 1 page and print the VM map again.\n" RESET);
 	press_enter();
-	/*
-	 * TODO: Write your code here to complete Step 2.
-	 */
 
+	size_t pagesize = sysconf(_SC_PAGESIZE);
+	if (pagesize == -1) {
+		perror("sysconf");
+		exit(EXIT_FAILURE);
+	}
+	void *buffer = mmap(NULL, pagesize, PROT_READ | PROT_WRITE,
+						MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	if (buffer == MAP_FAILED) {
+		perror("mmap");
+		exit(EXIT_FAILURE);
+	}
+	show_maps();
 
 	/*
 	 * Step 3: Find the physical address of the first page of your buffer
