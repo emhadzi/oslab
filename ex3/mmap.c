@@ -240,11 +240,7 @@ int main(void)
 		"size equal to 1 page and print the VM map again.\n" RESET);
 	press_enter();
 
-	size_t pagesize = sysconf(_SC_PAGESIZE);
-	if (pagesize == -1) {
-		perror("sysconf");
-		exit(EXIT_FAILURE);
-	}
+	size_t pagesize = get_page_size();
 	void *buffer = mmap(NULL, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC,
 						MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	if (buffer == MAP_FAILED) {
@@ -262,7 +258,8 @@ int main(void)
 	press_enter();
 
 	uint64_t n = get_physical_address((uint64_t)buffer);
-	printf("Physical address: 0x%" PRIx64 "\n", n);
+    if(n!=0)
+		printf("Physical address: 0x%" PRIx64 "\n", n);
 
 	/*
 	 * Step 4: Write zeros to the buffer and repeat Step 3.
@@ -277,7 +274,8 @@ int main(void)
     }
 
 	n = get_physical_address((uint64_t)buffer);
-	printf("Physical address: 0x%lx \n", n);
+	if(n!=0)
+		printf("Physical address: 0x%lx \n", n);
 
 	/*
 	 * Step 5: Use mmap(2) to map file.txt (memory-mapped files) and print
