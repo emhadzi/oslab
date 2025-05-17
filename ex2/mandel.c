@@ -14,13 +14,19 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdbool.h>
+#include <signal.h>
+#include <unistd.h>
 
 #include "mandel-lib.h"
 
+// #if defined(SYNC_ATOMIC) ^ defined(SYNC_MUTEX) == 0
+// #error You must #define exactly one of SYNC_ATOMIC or SYNC_MUTEX.
+// #endif
+
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define MANDEL_MAX_ITERATION 100000
-#define MAXN 1000  // Maximum number of calculation threads
-#define M 1000  // Size of buffer in lines
+#define MAXN 1000  	// Maximum number of calculation threads
+#define M 10 		// Size of buffer in lines
 /***************************
  * Compile-time parameters *
  ***************************/
@@ -29,12 +35,14 @@
  * Output at the terminal is is x_chars wide by y_chars long
 */
 int y_chars = 400;
-int x_chars = 700;
-int n;			// Number of threads
-int **buff;		// Output buffer
+int x_chars = 800;
+int n;				// Number of threads
+int **buff;			// Output buffer
+int lines_done = 0; // Number of lines done
 
+sem_t *can_maybe_calc;
 sem_t *can_calc;
-sem_t *can_print; // To support multiple printers in the future
+sem_t *can_print; 
 
 /*
  * The part of the complex plane to be drawn:
@@ -49,6 +57,25 @@ double ymin = -1.0, ymax = 1.0;
  */
 double xstep;
 double ystep;
+
+
+void handle_sigint(int sig)
+{
+	reset_xterm_color(1);
+	exit(0);
+}
+
+void setup_sigint_handler()
+{
+	struct sigaction sa;
+	sa.sa_handler = handle_sigint;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	if (sigaction(SIGINT, &sa, NULL) == -1) {
+		perror("sigaction");
+		exit(1);
+	}
+}
 
 /*
  * This function computes a line of output
@@ -111,31 +138,21 @@ void output_mandel_line(int fd, int color_val[])
 
 void *calc_lines(void *arg)
 {
-	// printf("Thread %ld started\n", pthread_self());
-	// fflush(stdout);
-	// line is thread local so we are ok
 	for(int line = *(int *)arg; line < y_chars; line += n){
-		// Wait until i can write to buffer
+		sem_wait(&can_maybe_calc[line]);
 		sem_wait(&can_calc[line % M]);
-		// printf("Thread %ld calculating\n", pthread_self());
-		// fflush(stdout);
 		compute_mandel_line(line, buff[line % M]);
 		sem_post(&can_print[line % M]);
 	}
-	// printf("Thread %ld done\n", pthread_self());
-	// fflush(stdout);
 	return NULL;
 }
 
 void *output_buffer(void *arg)
 {
-	printf("Output thread started\n");
-	fflush(stdout);
-	for (int lines_done = 0; lines_done < y_chars; lines_done++){
+	for (; lines_done < y_chars; lines_done++){
 		sem_wait(&can_print[lines_done % M]);
-		// printf("Output thread\n");
-		// fflush(stdout);
 		output_mandel_line(1, buff[lines_done % M]);
+		sem_post(&can_maybe_calc[lines_done + M]);
 		sem_post(&can_calc[lines_done % M]);
 	}
 	return NULL;
@@ -143,6 +160,10 @@ void *output_buffer(void *arg)
 
 int main(int argc, char *argv[])
 {
+	setup_sigint_handler();
+
+	n = atoi(argv[1]);
+
 	pthread_t t[MAXN];
 	pthread_t tout;
 	buff = malloc(min(M, y_chars) * sizeof(int *));
@@ -150,6 +171,7 @@ int main(int argc, char *argv[])
 		buff[i] = malloc(x_chars * sizeof(int));
 	}
 	
+	can_maybe_calc = malloc(y_chars * sizeof(sem_t));
 	can_calc = malloc(min(M, y_chars) * sizeof(sem_t));
 	can_print = malloc(min(M, y_chars) * sizeof(sem_t));
 	
@@ -158,7 +180,11 @@ int main(int argc, char *argv[])
 		sem_init(&can_print[i], 0, 0);
 	}
 
-	n = atoi(argv[1]);
+	for (int i = 0; i < min(M, y_chars); i++)
+		sem_init(&can_maybe_calc[i], 0, 1);
+
+	for (int i = min(M, y_chars); i < y_chars; i++)
+		sem_init(&can_maybe_calc[i], 0, 0);
 
 	xstep = (xmax - xmin) / x_chars;
 	ystep = (ymax - ymin) / y_chars;
