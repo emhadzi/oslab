@@ -11,11 +11,16 @@
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <stdbool.h>
 
 #include "mandel-lib.h"
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
 #define MANDEL_MAX_ITERATION 100000
-
+#define MAXN 1000  // Maximum number of calculation threads
+#define M 1000  // Size of buffer in lines
 /***************************
  * Compile-time parameters *
  ***************************/
@@ -23,8 +28,13 @@
 /*
  * Output at the terminal is is x_chars wide by y_chars long
 */
-int y_chars = 50;
-int x_chars = 90;
+int y_chars = 400;
+int x_chars = 700;
+int n;			// Number of threads
+int **buff;		// Output buffer
+
+sem_t *can_calc;
+sem_t *can_print; // To support multiple printers in the future
 
 /*
  * The part of the complex plane to be drawn:
@@ -81,7 +91,8 @@ void output_mandel_line(int fd, int color_val[])
 	
 	char point ='@';
 	char newline='\n';
-
+	// We assume x is long enough to be an efficient buffer eg 1KB long
+	// Otherwise, printf would be more efficient
 	for (i = 0; i < x_chars; i++) {
 		/* Set the current color, then output the point */
 		set_xterm_color(fd, color_val[i]);
@@ -98,31 +109,85 @@ void output_mandel_line(int fd, int color_val[])
 	}
 }
 
-void compute_and_output_mandel_line(int fd, int line)
+void *calc_lines(void *arg)
 {
-	/*
-	 * A temporary array, used to hold color values for the line being drawn
-	 */
-	int color_val[x_chars];
-
-	compute_mandel_line(line, color_val);
-	output_mandel_line(fd, color_val);
+	// printf("Thread %ld started\n", pthread_self());
+	// fflush(stdout);
+	// line is thread local so we are ok
+	for(int line = *(int *)arg; line < y_chars; line += n){
+		// Wait until i can write to buffer
+		sem_wait(&can_calc[line % M]);
+		// printf("Thread %ld calculating\n", pthread_self());
+		// fflush(stdout);
+		compute_mandel_line(line, buff[line % M]);
+		sem_post(&can_print[line % M]);
+	}
+	// printf("Thread %ld done\n", pthread_self());
+	// fflush(stdout);
+	return NULL;
 }
 
-int main(void)
+void *output_buffer(void *arg)
 {
-	int line;
+	printf("Output thread started\n");
+	fflush(stdout);
+	for (int lines_done = 0; lines_done < y_chars; lines_done++){
+		sem_wait(&can_print[lines_done % M]);
+		// printf("Output thread\n");
+		// fflush(stdout);
+		output_mandel_line(1, buff[lines_done % M]);
+		sem_post(&can_calc[lines_done % M]);
+	}
+	return NULL;
+}
+
+int main(int argc, char *argv[])
+{
+	pthread_t t[MAXN];
+	pthread_t tout;
+	buff = malloc(min(M, y_chars) * sizeof(int *));
+	for (int i = 0; i < min(M, y_chars); i++){
+		buff[i] = malloc(x_chars * sizeof(int));
+	}
+	
+	can_calc = malloc(min(M, y_chars) * sizeof(sem_t));
+	can_print = malloc(min(M, y_chars) * sizeof(sem_t));
+	
+	for (int i = 0; i < min(M, y_chars); i++){
+		sem_init(&can_calc[i], 0, 1);
+		sem_init(&can_print[i], 0, 0);
+	}
+
+	n = atoi(argv[1]);
 
 	xstep = (xmax - xmin) / x_chars;
 	ystep = (ymax - ymin) / y_chars;
 
-	/*
-	 * draw the Mandelbrot Set, one line at a time.
-	 * Output is sent to file descriptor '1', i.e., standard output.
-	 */
-	for (line = 0; line < y_chars; line++) {
-		compute_and_output_mandel_line(1, line);
+	/*  
+	* Have one output thread
+	* And n calc threads
+	* Have a buffer of size m of precalculated lines
+	*/
+	int ret = pthread_create(&tout, NULL, output_buffer, NULL);
+	if (ret) {
+		perror("pthread_create");
+		exit(1);
 	}
+
+	for (int i = 0; i < n; i++){	
+		int *arg = malloc(sizeof(int));
+		*arg = i;
+		int ret = pthread_create(&t[i], NULL, calc_lines, arg);
+		if (ret) {
+			perror("pthread_create");
+			exit(1);
+		}
+	}
+
+	for (int i = 0; i < n; i++)
+		pthread_join(t[i], NULL);
+
+	pthread_join(tout, NULL);
 
 	reset_xterm_color(1);
 	return 0;
