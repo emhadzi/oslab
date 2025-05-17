@@ -269,6 +269,7 @@ int main(void)
 		"Step 3. What happened?\n" RESET);
 	press_enter();
 
+    // Initialize buffer with zeros
     for(int i = 0; i < pagesize/sizeof(int); i++) {
     	((int*)buffer)[i]=0;
     }
@@ -282,10 +283,34 @@ int main(void)
 	printf(RED "\nStep 5: Use mmap(2) to read and print file.txt. Print "
 		"the new mapping information that has been created.\n" RESET);
 	press_enter();
-	/*
-	 * TODO: Write your code here to complete Step 5.
-	 */
 
+	// Open file for reading
+	int fd = open("file.txt", O_RDONLY);
+	if (fd == -1) {
+		perror("open");
+		exit(EXIT_FAILURE);
+	}
+
+	// Get file size
+	struct stat sb;
+	if (fstat(fd, &sb) == -1) {
+		perror("fstat");
+		close(fd);
+		exit(EXIT_FAILURE);
+	}
+
+	size_t filesize = sb.st_size;
+
+	// mmap the file
+	void *filetxt = mmap(NULL, filesize, PROT_READ, MAP_PRIVATE, fd, 0);
+	if (mapped == MAP_FAILED) {
+		perror("mmap");
+		close(fd);
+		exit(EXIT_FAILURE);
+	}
+
+    // Print contents of file
+	fwrite(buffer, 1, filesize/sizeof(char), stdout);
 
 	/*
 	 * Step 6: Use mmap(2) to allocate a shared buffer of 1 page. Use
