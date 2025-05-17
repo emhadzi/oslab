@@ -270,9 +270,10 @@ int main(void)
 	press_enter();
 
     for(int i = 0; i < pagesize/sizeof(int); i++) {
-    	(*int)buffer[i]=0;
+    	((int*)buffer)[i]=0;
     }
 
+    get_physical_address((uint64_t)buffer);
 	/*
 	 * Step 5: Use mmap(2) to map file.txt (memory-mapped files) and print
 	 * its content. Use file_shared_buf.
