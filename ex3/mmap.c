@@ -238,7 +238,7 @@ int main(void)
 	printf(RED "\nStep 2: Use mmap(2) to allocate a private buffer of "
 		"size equal to 1 page and print the VM map again.\n" RESET);
 	press_enter();
-	/*
+
 	size_t pagesize = sysconf(_SC_PAGESIZE);
 	if (pagesize == -1) {
 		perror("sysconf");
@@ -251,7 +251,7 @@ int main(void)
 		exit(EXIT_FAILURE);
 	}
 	show_maps();
-	*/
+
 	/*
 	 * Step 3: Find the physical address of the first page of your buffer
 	 * in main memory. What do you see?
