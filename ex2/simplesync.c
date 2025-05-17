@@ -27,7 +27,7 @@
 /* Dots indicate lines where you are free to insert code at will */
 /* ... */
 #if defined(SYNC_ATOMIC) ^ defined(SYNC_MUTEX) == 0
-# error You must #define exactly one of SYNC_ATOMIC or SYNC_MUTEX.
+#error You must #define exactly one of SYNC_ATOMIC or SYNC_MUTEX.
 #endif
 
 #if defined(SYNC_ATOMIC)
@@ -35,6 +35,8 @@
 #else
 # define USE_ATOMIC_OPS 0
 #endif
+
+pthread_mutex_t lock;
 
 void *increase_fn(void *arg)
 {
@@ -46,13 +48,15 @@ void *increase_fn(void *arg)
 		if (USE_ATOMIC_OPS) {
 			/* ... */
 			/* You can modify the following line */
-			++(*ip);
+			__sync_add_and_fetch(ip, 1);
 			/* ... */
 		} else {
 			/* ... */
+			pthread_mutex_lock(&lock);
 			/* You cannot modify the following line */
 			++(*ip);
 			/* ... */
+			pthread_mutex_unlock(&lock);
 		}
 	}
 	fprintf(stderr, "Done increasing variable.\n");
@@ -70,13 +74,15 @@ void *decrease_fn(void *arg)
 		if (USE_ATOMIC_OPS) {
 			/* ... */
 			/* You can modify the following line */
-			--(*ip);
+			__sync_sub_and_fetch(ip, 1);
 			/* ... */
 		} else {
 			/* ... */
+			pthread_mutex_lock(&lock);
 			/* You cannot modify the following line */
 			--(*ip);
 			/* ... */
+			pthread_mutex_unlock(&lock);
 		}
 	}
 	fprintf(stderr, "Done decreasing variable.\n");
@@ -88,6 +94,7 @@ void *decrease_fn(void *arg)
 int main(int argc, char *argv[])
 {
 	int val, ret, ok;
+	pthread_mutex_init(&lock, NULL);
 	pthread_t t1, t2;
 
 	/*
@@ -118,6 +125,7 @@ int main(int argc, char *argv[])
 	ret = pthread_join(t2, NULL);
 	if (ret)
 		perror_pthread(ret, "pthread_join");
+	pthread_mutex_destroy(&lock);
 
 	/*
 	 * Is everything OK?
