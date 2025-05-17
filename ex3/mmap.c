@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <inttypes.h>
 
 #include "help.h"
 
@@ -260,7 +261,8 @@ int main(void)
 		"buffer in main memory. What do you see?\n" RESET);
 	press_enter();
 
-	get_physical_address((uint64_t)buffer);
+	uint64_t n = get_physical_address((uint64_t)buffer);
+	printf("Physical address: 0x%" PRIx64 "\n", n);
 
 	/*
 	 * Step 4: Write zeros to the buffer and repeat Step 3.
@@ -271,10 +273,11 @@ int main(void)
 
     // Initialize buffer with zeros
     for(int i = 0; i < pagesize/sizeof(int); i++) {
-    	((int*)buffer)[i]=0;
+    	((int*)buffer)[i]=i;
     }
 
-    get_physical_address((uint64_t)buffer);
+	n = get_physical_address((uint64_t)buffer);
+	printf("Physical address: 0x%lx \n", n);
 
 	/*
 	 * Step 5: Use mmap(2) to map file.txt (memory-mapped files) and print
@@ -285,7 +288,7 @@ int main(void)
 	press_enter();
 
 	// Open file for reading
-	int fd = open("file.txt", O_RDONLY);
+	fd = open("file.txt", O_RDONLY);
 	if (fd == -1) {
 		perror("open");
 		exit(EXIT_FAILURE);
@@ -303,14 +306,14 @@ int main(void)
 
 	// mmap the file
 	void *filetxt = mmap(NULL, filesize, PROT_READ, MAP_PRIVATE, fd, 0);
-	if (mapped == MAP_FAILED) {
+	if (filetxt == MAP_FAILED) {
 		perror("mmap");
 		close(fd);
 		exit(EXIT_FAILURE);
 	}
 
     // Print contents of file
-	fwrite(buffer, 1, filesize/sizeof(char), stdout);
+	write(STDOUT_FILENO, filetxt, filesize);
 
 	/*
 	 * Step 6: Use mmap(2) to allocate a shared buffer of 1 page. Use

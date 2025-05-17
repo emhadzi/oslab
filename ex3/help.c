@@ -120,7 +120,6 @@ out:
  */
 uint64_t get_physical_address(uint64_t va)
 {
-  	printf("nigga\n");
 	int pmfd = 0;
 	uint64_t vpn = 0, offset = 0, pagemap_entry = 0;
 
@@ -139,6 +138,8 @@ uint64_t get_physical_address(uint64_t va)
 		die("read(" PAGEMAP_PATH ")");
 	if (-1 == close(pmfd))
 		perror("close(" PAGEMAP_PATH ")");
+
+		printf("0x%lx\n", pagemap_entry);
 
 	// Then, check the value of the `PM_PRESENT` bit...
 	if (GET_BIT(pagemap_entry, 63))
