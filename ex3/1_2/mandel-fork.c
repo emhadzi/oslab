@@ -14,6 +14,7 @@
 
 #include <semaphore.h>
 #include <sys/mman.h>
+#include <signal.h>
 
 #include "mandel-lib.h"
 
@@ -158,8 +159,29 @@ void destroy_shared_memory_area(void *addr, unsigned int numbytes) {
 	}
 }
 
+// USER CODE
+
 int NPROCS;
 sem_t *sem_buf;
+size_t sem_buf_size;
+
+void handle_sigint(int sig)
+{
+	reset_xterm_color(1);
+	exit(EXIT_SUCCESS);
+}
+
+void setup_sigint_handler()
+{
+	struct sigaction sa;
+	sa.sa_handler = handle_sigint;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	if (sigaction(SIGINT, &sa, NULL) == -1) {
+		perror("sigaction");
+		exit(EXIT_FAILURE);
+	}
+}
 
 // Child process part of code
 void child(int id){
@@ -180,6 +202,9 @@ void child(int id){
 
 int main(int argc, char *argv[])
 {
+    // Setup singal handler
+    setup_sigint_handler();
+
     // Check arguments
     if(argc !=2) {
         perror("NPROCS not entered\n");
@@ -192,7 +217,8 @@ int main(int argc, char *argv[])
     }
 
     // Create and initialize shared semaphore buffer
-    sem_buf = create_shared_memory_area(sizeof(sem_t)*NPROCS);
+    sem_buf_size = sizeof(sem_t)*NPROCS;
+    sem_buf = create_shared_memory_area(sem_buf_size);
     for(int i = 0; i<NPROCS; ++i){
         if (sem_init(&sem_buf[i], 1, 0) != 0){
             perror("Failed semaphore initalization");
@@ -209,18 +235,23 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         } else if (p == 0) {
             child(i);
+            destroy_shared_memory_area(sem_buf,sem_buf_size);
             exit(EXIT_SUCCESS);
         }
         pids[i]=p;
     }
 
+    // start ordered output
     sem_post(&sem_buf[0]);
 
-    // we only need to wait for the last child
-    // since they print in a chain, last child pid is p
+    // we wait for all children to finish
     int status;
     for(int i=0; i<NPROCS; ++i)
         waitpid(pids[i], &status, 0);
+
+    // clean up
+    destroy_shared_memory_area(sem_buf,sem_buf_size);
 	reset_xterm_color(1);
+
 	return 0;
 }
