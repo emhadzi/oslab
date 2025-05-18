@@ -353,6 +353,8 @@ int main(void)
 	}
 	show_maps();
 
+    heap_shared_buf[0] = 1; // comment this
+
 	p = fork();
 	if (p < 0)
 		die("fork");
