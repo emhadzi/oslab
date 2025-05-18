@@ -45,7 +45,7 @@ kgarten.o: kgarten.c
 	$(CC) $(CFLAGS) -c -o kgarten.o kgarten.c
 
 
-## Mandel
+## Mandel (semapthores)
 mandel: mandel-lib.o mandel.o
 	$(CC) $(CFLAGS) -o mandel mandel-lib.o mandel.o $(LIBS)
 
@@ -54,6 +54,14 @@ mandel-lib.o: mandel-lib.h mandel-lib.c
 
 mandel.o: mandel.c
 	$(CC) $(CFLAGS) -c -o mandel.o mandel.c $(LIBS)
+
+## Mandel (condition variables)
+mandel_cond: mandel-lib.o mandel_cond.o
+	$(CC) $(CFLAGS) -o mandel_cond mandel-lib.o mandel_cond.o $(LIBS)
+
+mandel_cond.o: mandel_cond.c
+	$(CC) $(CFLAGS) -c -o mandel_cond.o mandel_cond.c $(LIBS)
+
 
 clean:
 	rm -f *.s *.o pthread-test simplesync-{atomic,mutex} kgarten mandel 

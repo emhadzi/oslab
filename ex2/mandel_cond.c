@@ -40,8 +40,14 @@ int n;				// Number of threads
 int **buff;			// Output buffer
 int lines_done = 0; // Number of lines done
 
-sem_t *can_calc;
-sem_t *can_print; 
+// sem_t *can_maybe_calc;
+// sem_t *can_calc;
+// sem_t *can_print; 
+
+pthread_mutex_t *buff_mutex;
+pthread_cond_t *cond_producer;
+pthread_cond_t cond_consumer;
+bool *ready;
 
 /*
  * The part of the complex plane to be drawn:
@@ -137,9 +143,16 @@ void output_mandel_line(int fd, int color_val[])
 void *calc_lines(void *arg)
 {
 	for(int line = *(int *)arg; line < y_chars; line += n){
-		sem_wait(&can_calc[line]);
+		pthread_mutex_lock(&buff_mutex[line % M]);
+		while(lines_done + M <= line)
+			pthread_cond_wait(&cond_producer[line % n], &buff_mutex[line % M]);
+		
 		compute_mandel_line(line, buff[line % M]);
-		sem_post(&can_print[line % M]);
+		ready[line] = true;
+		pthread_mutex_unlock(&buff_mutex[line % M]);
+	
+		if(lines_done == line)
+			pthread_cond_signal(&cond_consumer);
 	}
 	return NULL;
 }
@@ -147,9 +160,17 @@ void *calc_lines(void *arg)
 void *output_buffer(void *arg)
 {
 	for (; lines_done < y_chars; lines_done++){
-		sem_wait(&can_print[lines_done % M]);
+		pthread_cond_signal(&cond_producer[lines_done % n]);
+
+		pthread_mutex_lock(&buff_mutex[lines_done % M]);
+		while(!ready[lines_done]){
+			pthread_cond_wait(&cond_consumer, &buff_mutex[lines_done % M]);
+			// printf("Thread %d: %d\n", lines_done % n, lines_done);
+		}
 		output_mandel_line(1, buff[lines_done % M]);
-		sem_post(&can_calc[lines_done + M]);
+		pthread_mutex_unlock(&buff_mutex[lines_done % M]);
+	
+		pthread_cond_signal(&cond_producer[(lines_done + M) % n]);
 	}
 	return NULL;
 }
@@ -166,16 +187,33 @@ int main(int argc, char *argv[])
 	for (int i = 0; i < min(M, y_chars); i++)
 		buff[i] = malloc(x_chars * sizeof(int));
 	
-	can_calc = malloc(y_chars * sizeof(sem_t));
-	can_print = malloc(min(M, y_chars) * sizeof(sem_t));
-	
-	for (int i = 0; i < min(M, y_chars); i++){
-		sem_init(&can_print[i], 0, 0);
-		sem_init(&can_calc[i], 0, 1);
-	}
+	// can_maybe_calc = malloc(y_chars * sizeof(sem_t));
+	// can_calc = malloc(min(M, y_chars) * sizeof(sem_t));
+	// can_print = malloc(min(M, y_chars) * sizeof(sem_t));
 
-	for (int i = min(M, y_chars); i < y_chars; i++)
-		sem_init(&can_calc[i], 0, 0);
+	// for (int i = 0; i < min(M, y_chars); i++){
+	// 	sem_init(&can_calc[i], 0, 1);
+	// 	sem_init(&can_print[i], 0, 0);
+	// }
+
+	// for (int i = 0; i < min(M, y_chars); i++)
+	// 	sem_init(&can_maybe_calc[i], 0, 1);
+
+	// for (int i = min(M, y_chars); i < y_chars; i++)
+	// 	sem_init(&can_maybe_calc[i], 0, 0);
+
+	ready = malloc(y_chars * sizeof(bool));
+	for (int i = 0; i < y_chars; i++)
+		ready[i] = false;
+
+	buff_mutex = malloc(min(M, y_chars) * sizeof(pthread_mutex_t));
+	for (int i = 0; i < min(M, y_chars); i++)
+		pthread_mutex_init(&buff_mutex[i], NULL);
+
+	cond_producer = malloc(n * sizeof(pthread_cond_t));
+	pthread_cond_init(&cond_consumer, NULL);
+	for (int i = 0; i < n; i++)
+		pthread_cond_init(&cond_producer[i], NULL);
 
 	xstep = (xmax - xmin) / x_chars;
 	ystep = (ymax - ymin) / y_chars;
