@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <semaphore.h>
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define CHUNK_SZ 1024
@@ -13,11 +14,11 @@
 int n;
 pid_t *pid;
 int *shared_counter_ptr;
+sem_t *sem;
 
 char *input_file;
 char target;
 int file_size;
-
 
 void child(int id){
         int fd = open(input_file, O_RDONLY);
@@ -32,7 +33,6 @@ void child(int id){
                 sz = file_size / n;
         }
 
-
         char buff[CHUNK_SZ];
         lseek(fd, start, SEEK_SET);
 
@@ -41,10 +41,11 @@ void child(int id){
                 for(int i = 0; i < read_sz; i++)
                         if(buff[i] == target)
                                 res++;
-                                //__sync_fetch_and_add(shared_counter_ptr, 1);
                 sz -= read_sz;
         }
-        __sync_add_and_fetch(shared_counter_ptr, res);
+        sem_wait(sem);
+        *shared_counter_ptr += res;
+        sem_post(sem);
 }
 
 /*
@@ -67,8 +68,12 @@ int main(int argc, char *argv[]){
         n = atoi(argv[3]);
         pid = malloc(n * sizeof(pid_t));
 
-        shared_counter_ptr = mmap(NULL, sizeof(int),
+        void *shared_memory = mmap(NULL, sizeof(int) + sizeof(sem_t),
                  PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+        shared_counter_ptr = (int *)shared_memory;
+        *shared_counter_ptr = 0;
+        sem = (sem_t *)(shared_memory + sizeof(int));
+        sem_init(sem, 1, 1); // 1 for process sharing!
 
         for(int i = 0; i < n; i++){
                 pid[i] = fork();
