@@ -12,6 +12,7 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include <semaphore.h>
 #include <sys/mman.h>
 
 #include "mandel-lib.h"
@@ -25,22 +26,22 @@
 /*
  * Output at the terminal is is x_chars wide by y_chars long
 */
-int y_chars = 50;
-int x_chars = 90;
+const int y_chars = 50;
+const int x_chars = 90;
 
 /*
  * The part of the complex plane to be drawn:
  * upper left corner is (xmin, ymax), lower right corner is (xmax, ymin)
 */
-double xmin = -1.8, xmax = 1.0;
-double ymin = -1.0, ymax = 1.0;
-	
+const double xmin = -1.8, xmax = 1.0;
+const double ymin = -1.0, ymax = 1.0;
+
 /*
  * Every character in the final output is
  * xstep x ystep units wide on the complex plane.
  */
-double xstep;
-double ystep;
+double xstep = (xmax - xmin) / x_chars;
+double ystep = (ymax - ymin) / y_chars;
 
 /*
  * This function computes a line of output
@@ -80,7 +81,7 @@ void compute_mandel_line(int line, int color_val[])
 void output_mandel_line(int fd, int color_val[])
 {
 	int i;
-	
+
 	char point ='@';
 	char newline='\n';
 
@@ -157,21 +158,69 @@ void destroy_shared_memory_area(void *addr, unsigned int numbytes) {
 	}
 }
 
-int main(void)
+int NPROCS;
+sem_t *sem_buf;
+
+// Child process part of code
+void child(int id){
+    int lines = (y_chars-id+NPROCS-1)/NPROCS;
+    int output_buf[lines][x_chars];
+    for(int line=0; line<lines; ++line){
+	    compute_mandel_line(id+line*NPROCS,
+	        output_buf[line]);
+    }
+    for(int line=0; line<lines; ++line){
+        sem_wait(&sem_buf[id]);
+        output_mandel_line(1,output_buf[line]);
+        sem_post(&sem_buf[(id+1)%NPROCS]);
+    }
+    return;
+}
+
+
+int main(int argc, char *argv[])
 {
-	int line;
+    // Check arguments
+    if(argc !=2) {
+        perror("NPROCS not entered\n");
+        exit(EXIT_FAILURE);
+    }
+    NPROCS = atoi(argv[1]);
+    if(NPROCS == 0){
+        perror("Invalid NPROCS\n");
+        exit(EXIT_FAILURE);
+    }
 
-	xstep = (xmax - xmin) / x_chars;
-	ystep = (ymax - ymin) / y_chars;
+    // Create and initialize shared semaphore buffer
+    sem_buf = create_shared_memory_area(sizeof(sem_t)*NPROCS);
+    for(int i = 0; i<NPROCS; ++i){
+        if (sem_init(&sem_buf[i], 1, 0) != 0){
+            perror("Failed semaphore initalization");
+            exit(EXIT_FAILURE);
+        }
+    }
 
-	/*
-	 * draw the Mandelbrot Set, one line at a time.
-	 * Output is sent to file descriptor '1', i.e., standard output.
-	 */
-	for (line = 0; line < y_chars; line++) {
-		compute_and_output_mandel_line(1, line);
-	}
+    // Create NPROCS processes
+    int pids[NPROCS];
+    for(int i = 0; i<NPROCS; ++i){
+        int p = fork();
+        if(p == -1){
+            perror("Fork failed\n");
+            exit(EXIT_FAILURE);
+        } else if (p == 0) {
+            child(i);
+            exit(EXIT_SUCCESS);
+        }
+        pids[i]=p;
+    }
 
+    sem_post(&sem_buf[0]);
+
+    // we only need to wait for the last child
+    // since they print in a chain, last child pid is p
+    int status;
+    for(int i=0; i<NPROCS; ++i)
+        waitpid(pids[i], &status, 0);
 	reset_xterm_color(1);
 	return 0;
 }
