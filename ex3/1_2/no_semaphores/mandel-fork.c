@@ -162,8 +162,8 @@ void destroy_shared_memory_area(void *addr, unsigned int numbytes) {
 // USER CODE
 
 int NPROCS;
-sem_t *sem_buf;
-size_t sem_buf_size;
+int *shared_buf;
+size_t shared_buf_size;
 
 void handle_sigint(int sig)
 {
@@ -185,16 +185,8 @@ void setup_sigint_handler()
 
 // Child process part of code
 void child(int id){
-    int lines = (y_chars-id+NPROCS-1)/NPROCS;
-    int output_buf[lines][x_chars];
-    for(int line=0; line<lines; ++line){
-	    compute_mandel_line(id+line*NPROCS,
-	        output_buf[line]);
-    }
-    for(int line=0; line<lines; ++line){
-        sem_wait(&sem_buf[id]);
-        output_mandel_line(1,output_buf[line]);
-        sem_post(&sem_buf[(id+1)%NPROCS]);
+    for(int line=id; line<y_chars; line+=NPROCS){
+	    compute_mandel_line(line, &shared_buf[line*x_chars]);
     }
     return;
 }
@@ -216,15 +208,9 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    // Create and initialize shared semaphore buffer
-    sem_buf_size = sizeof(sem_t)*NPROCS;
-    sem_buf = create_shared_memory_area(sem_buf_size);
-    for(int i = 0; i<NPROCS; ++i){
-        if (sem_init(&sem_buf[i], 1, 0) != 0){
-            perror("Failed semaphore initalization");
-            exit(EXIT_FAILURE);
-        }
-    }
+    // Create shared buffer
+    shared_buf_size = x_chars * y_chars * sizeof(int);
+    shared_buf = create_shared_memory_area(shared_buf_size);
 
     // Create NPROCS processes
     int pids[NPROCS];
@@ -235,22 +221,24 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         } else if (p == 0) {
             child(i);
-            destroy_shared_memory_area(sem_buf,sem_buf_size);
+            destroy_shared_memory_area(shared_buf, shared_buf_size);
             exit(EXIT_SUCCESS);
         }
         pids[i]=p;
     }
 
-    // start ordered output
-    sem_post(&sem_buf[0]);
-
-    // we wait for all children to finish
+    // Wait for all children to finish
     int status;
     for(int i=0; i<NPROCS; ++i)
         waitpid(pids[i], &status, 0);
 
+    // Print result
+	for(int i=0; i<y_chars; ++i){
+          output_mandel_line(1, &shared_buf[x_chars * i]);
+	}
+
     // clean up
-    destroy_shared_memory_area(sem_buf,sem_buf_size);
+    destroy_shared_memory_area(shared_buf, shared_buf_size);
 	reset_xterm_color(1);
 
 	return 0;
