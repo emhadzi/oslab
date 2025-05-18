@@ -5,4 +5,9 @@ How physical memory address unwrapping works (not portable on Manolis laptop)?
 
 How .so (dynamic libraries) ask for memory regions on startup, how that relates to heap if library calls malloc?
 Is this so multiple processes that use the library have same Virtual Address mapping on the library, despite maybe different
-physical addresses on not shared data?
+physical addresses on not shared data? (if address resolution on loading)
+
+Ask about ASLR (Address Space Layout Randomization) and how it improves safety 
+(in return oriented programming with stack overflows - this can be mitigated by canaries).
+
+
