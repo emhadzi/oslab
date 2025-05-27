@@ -73,48 +73,48 @@ sys	0m0,142s
    Έτσι αποφεύγονται αχρείαστα context switches (αφού το νήμα που περιμένει παραμένει σε κατάσταση busy wait) και το "κρίσιμο τμήμα" πάντα ολοκληρώνεται σε έναν κβαντοχρόνο χρονοδρομολόγησης, δηλαδή δεν μένει ποτέ μπλοκαρισμένο από μια διεργασία η οποία είναι σε κατάσταση αναμονής. Φυσικά, πιο σύνθετες επεξεργασίες δεδομένων δεν θα επωφελούνταν από τη χρήση ατομικών εντολών καθώς αυτές υποστηρίζουν μόνο χαμηλού επιπέδου εντολές (όπως η άθροιση), οι οποίες γίνονται τάξεις μεγέθους πιο γρήγορα σε σχέση με το ίδιο το context switch. Έτσι δικαιολογούνται οι επεξαργαστικοί κύκλοι που σπαταλώνται στο busy wait των υπόλοιπων διεργασιών-νημάτων που μοιράζονται τον πόρο, τα οποία δεν στέλνονται σε αναμονή όπως γίνεται με τα mutexes.
 
 3. Για την συνάρτηση `increase_fn`, όταν υλοποιείται με atomic, εκτελούμε:
-
-``` makefile
-simplesync-atomic.s: simplesync.c
-	$(CC) $(CFLAGS) -DSYNC_ATOMIC -S -g -o simplesync-atomic.s simplesync.c:
-```
-
-Στο αρχείο `simplesync-atomic.s` αναζητούμε την φράση `.loc 1 51` και βρίσκουμε τον παρακάτω κώδικα:
-
-``` x86asm
-	movq	%rdi, %rbx
-	movl	$10000000, %eax
-.L2:
-	lock addl	$1, (%rbx)          
-	subl	$1, %eax
-	jne	.L2
-```
-
-Το `lock` prefix σε μία εντολή δηλώνει ότι "κλειδώνει" το cache line της κοινής L3 ώστε αν ένας άλλος επεξεργαστής επιχειρήσει να διαβάσει από την ίδια διεύθυνση μνήμης να αναγκαστεί να κάνει stall μέχρι να ξεκλειδώσει (προτόκολο MESI).
-
-Προφανώς σε περίπτωση ενός πυρήνα (concurrency) δεν υπάρχει πρόβλημα αφου δεν μπορεί να πραγματοποιηθεί context switch στην μέση της εντολής
+	
+	``` makefile
+	simplesync-atomic.s: simplesync.c
+		$(CC) $(CFLAGS) -DSYNC_ATOMIC -S -g -o simplesync-atomic.s simplesync.c:
+	```
+	
+	Στο αρχείο `simplesync-atomic.s` αναζητούμε την φράση `.loc 1 51` και βρίσκουμε τον παρακάτω κώδικα:
+	
+	``` x86asm
+		movq	%rdi, %rbx
+		movl	$10000000, %eax
+	.L2:
+		lock addl	$1, (%rbx)          
+		subl	$1, %eax
+		jne	.L2
+	```
+	
+	Το `lock` prefix σε μία εντολή δηλώνει ότι "κλειδώνει" το cache line της κοινής L3 ώστε αν ένας άλλος επεξεργαστής επιχειρήσει να διαβάσει από την ίδια διεύθυνση μνήμης να αναγκαστεί να κάνει stall μέχρι να ξεκλειδώσει (προτόκολο MESI).
+	
+	Προφανώς σε περίπτωση ενός πυρήνα (concurrency) δεν υπάρχει πρόβλημα αφου δεν μπορεί να πραγματοποιηθεί context switch στην μέση της εντολής
 
 4. Για την συνάρτηση `increase_fn` με mutexes, με παρόμοιο τρόπο, βρίσκουμε τον παρακάτω κώδικα στο αρχείο `simplesync-mutex.s`:
-
-```x86asm
-movq	%rdi, %rbp
-leaq	lock(%rip), %r12                ; Get the address of lock (&lock) into r12
-movl	$10000000, %ebx                 ; Load immediate for remaining loop iterations
-.L2:
-	movq	%r12, %rdi                  ; Pass it as argument to pthread_mutex_lock
-	call	pthread_mutex_lock@PLT      ; PLT for dynamic linking
-	movl	0(%rbp), %eax               ; %eax = *ip
-	movq	%r12, %rdi                  ; Pass &lock as argument for pthread_mutex_unlock
-	addl	$1, %eax                    ; %eax++
-	movl	%eax, 0(%rbp)               ; *ip = %eax
-	call	pthread_mutex_unlock@PLT     
-	subl	$1, %ebx                    
-	jne	.L2
-```
-
-Το `pthread_mutex_lock` και `pthread_mutex_unlock` είναι οι συναρτήσεις που υλοποιούν τον συγχρονισμό με mutexes. Ο ορισμός τους μπορεί να βρεθεί στην dynamic library pthread (πιθανώς υλοποιούνται με ατομικές εντολές τύπου `test_and_set()`). 
-
-Φαίνεται πως η χρήση mutexes απαιτεί σημαντικά περισσότερες εντολές και άρα περισσότερο χρόνο εκτέλεσης σε σχέση με τις ατομικές εντολές. 
+	
+	```x86asm
+	movq	%rdi, %rbp
+	leaq	lock(%rip), %r12                ; Get the address of lock (&lock) into r12
+	movl	$10000000, %ebx                 ; Load immediate for remaining loop iterations
+	.L2:
+		movq	%r12, %rdi                  ; Pass it as argument to pthread_mutex_lock
+		call	pthread_mutex_lock@PLT      ; PLT for dynamic linking
+		movl	0(%rbp), %eax               ; %eax = *ip
+		movq	%r12, %rdi                  ; Pass &lock as argument for pthread_mutex_unlock
+		addl	$1, %eax                    ; %eax++
+		movl	%eax, 0(%rbp)               ; *ip = %eax
+		call	pthread_mutex_unlock@PLT     
+		subl	$1, %ebx                    
+		jne	.L2
+	```
+	
+	Το `pthread_mutex_lock` και `pthread_mutex_unlock` είναι οι συναρτήσεις που υλοποιούν τον συγχρονισμό με mutexes. Ο ορισμός τους μπορεί να βρεθεί στην dynamic library pthread (πιθανώς υλοποιούνται με ατομικές εντολές τύπου `test_and_set()`). 
+	
+	Φαίνεται πως η χρήση mutexes απαιτεί σημαντικά περισσότερες εντολές και άρα περισσότερο χρόνο εκτέλεσης σε σχέση με τις ατομικές εντολές. 
 
 
 
