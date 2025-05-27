@@ -94,7 +94,7 @@ simplesync-atomic.s: simplesync.c
 
 Προφανώς σε περίπτωση ενός πυρήνα (concurrency) δεν υπάρχει πρόβλημα αφου δεν μπορεί να πραγματοποιηθεί context switch στην μέση της εντολής
 
-4.Για την συνάρτηση `increase_fn` με mutexes, με παρόμοιο τρόπο, βρίσκουμε τον παρακάτω κώδικα στο αρχείο `simplesync-mutex.s`:
+4. Για την συνάρτηση `increase_fn` με mutexes, με παρόμοιο τρόπο, βρίσκουμε τον παρακάτω κώδικα στο αρχείο `simplesync-mutex.s`:
 
 ```x86asm
 movq	%rdi, %rbp
