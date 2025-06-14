@@ -20,6 +20,13 @@ char *input_file;
 char target;
 int file_size;
 
+void sigint_handler(int sig) {
+        sem_wait(sem);
+        printf("Found %d occurences of character %c.\n", *shared_counter_ptr, target);
+        exit(0);
+        sem_post(sem);
+}
+
 void child(int id){
         int fd = open(input_file, O_RDONLY);
         int start, sz, res = 0;
@@ -42,10 +49,10 @@ void child(int id){
                         if(buff[i] == target)
                                 res++;
                 sz -= read_sz;
+                sem_wait(sem);
+                *shared_counter_ptr += res;
+                sem_post(sem);
         }
-        sem_wait(sem);
-        *shared_counter_ptr += res;
-        sem_post(sem);
 }
 
 /*
@@ -57,6 +64,15 @@ int main(int argc, char *argv[]){
         if(argc < 4){
                 printf("Invalid arguments\n");
                 return -1;
+        }
+
+        struct sigaction sa;
+        sa.sa_handler = sigint_handler;
+        sa.sa_flags = 0;
+        sigemptyset(&sa.sa_mask);
+        if (sigaction(SIGINT, &sa, NULL) == -1) {
+                perror("sigaction");
+                exit(EXIT_FAILURE);
         }
 
         input_file = argv[1];
@@ -89,5 +105,5 @@ int main(int argc, char *argv[]){
                 waitpid(pid[i], &status, 0);
         }
 
-        printf("Found %d occurances of character %c", *shared_counter_ptr, target);
+        printf("Found %d total occurances of character %c", *shared_counter_ptr, target);
 }

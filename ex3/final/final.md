@@ -125,3 +125,40 @@
 ### 1.2.2 Υλοποίηση χωρίς semaphores
 
 ## 1.3 Επέκταση Άσκησης 1
+
+Εγκαθιστούμε έναν signal handler ο οποίος κλειδώνει τον κοινό πόρο `shared_memory_counter` και τον εκτυπώνει στη λήψη του σήματος *SIGINT*.
+```c
+void sigint_handler(int sig) {
+        sem_wait(sem);
+        printf("Found %d occurences of character %c.\n", *shared_counter_ptr, target);
+        exit(0);
+        sem_post(sem);
+}
+```
+```c
+struct sigaction sa;
+        sa.sa_handler = sigint_handler;
+        sa.sa_flags = 0;
+        sigemptyset(&sa.sa_mask);
+        if (sigaction(SIGINT, &sa, NULL) == -1) {
+                perror("sigaction");
+                exit(EXIT_FAILURE);
+        }
+```
+
+Τώρα αρκεί να κλειδώσουμε τον κοινό πόρο και σε κάθε εύρεση του χαρακτήρα.
+
+```c
+while(sz > 0){
+                int read_sz = read(fd, buff, min(sz, CHUNK_SZ));
+                for(int i = 0; i < read_sz; i++)
+                        if(buff[i] == target)
+                                res++;
+                sz -= read_sz;
+                sem_wait(sem);
+                *shared_counter_ptr += res;
+                sem_post(sem);
+        }
+```
+
+Ας σημειωθεί πως αφού ο πόρος είναι απλός ακέραιος, θα αρκούσε αντί για κλείδωμα η εντολή *atomic add*.
